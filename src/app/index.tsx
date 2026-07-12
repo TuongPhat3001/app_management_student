@@ -62,13 +62,13 @@ const LoginScreen = () => {
         const navigateToDashboard = () => {
           const role = data.role?.toLowerCase();
           if (role === "student") {
-            router.replace("/(student)/dashboard");
+            router.replace("/(student)/Dashboard");
           } else if (role === "teacher") {
-            router.replace("/(teacher)/dashboard");
+            router.replace("/(teacher)/Dashboard");
           } else if (role === "admin") {
-            router.replace("/(admin)/dashboard");
+            router.replace("/(admin)/Dashboard");
           } else {
-            router.replace("/(auth)/login");
+            router.replace("/(auth)/Login");
           }
         };
 
