@@ -3,17 +3,17 @@ import api from "./axios";
 import { LoginRequest } from "../type/auth";
 
 export const loginAPI = (data: LoginRequest) => {
-  return api.post("/login", data);
+  return api.post("/Login", data);
 };
 
 export const logoutAPI = () => {
-  return api.post("/logout");
+  return api.post("/Logout");
 };
 
 export const forgotPasswordAPI = (email: string) => {
-  return api.post("/forgot-password", { email });
+  return api.post("/ForgotPassword", { email });
 };
 
 export const changePasswordAPI = (data: any) => {
-  return api.post("/change-password", data);
+  return api.post("/ChangePassword", data);
 };

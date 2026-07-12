@@ -1,14 +1,15 @@
 import { StyleSheet, Text, View } from 'react-native'
 import React from 'react'
+import CreateStudent from './CreateStudent'
 
-const Exams = () => {
+const CreateTeacher = () => {
   return (
     <View>
-      <Text>Exams</Text>
+      <Text>CreateTeacher</Text>
     </View>
   )
 }
 
-export default Exams
+export default CreateTeacher
 
 const styles = StyleSheet.create({})

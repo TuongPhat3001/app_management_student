@@ -1,14 +1,14 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-const Users = () => {
+const QrAttendance = () => {
   return (
     <View>
-      <Text>Users</Text>
+      <Text>QrAttendance</Text>
     </View>
   );
 };
 
-export default Users;
+export default QrAttendance;
 
 const styles = StyleSheet.create({});

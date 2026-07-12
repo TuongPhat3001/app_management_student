@@ -1,14 +1,14 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-const Users = () => {
+const ClassOffer = () => {
   return (
     <View>
-      <Text>Users</Text>
+      <Text>ClassOffer</Text>
     </View>
   );
 };
 
-export default Users;
+export default ClassOffer;
 
 const styles = StyleSheet.create({});

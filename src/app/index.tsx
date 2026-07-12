@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { loginAPI } from "../api/authApi";
 
 const LoginScreen = () => {
   const [email, setEmail] = useState("");
@@ -46,41 +47,55 @@ const LoginScreen = () => {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8080/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await loginAPI({ email, password });
+      const data = response.data;
 
-      const data = await response.json();
-
-      if (response.ok && data.token) {
+      if (data.token) {
         if (Platform.OS === "web") {
-          await AsyncStorage.setItem("accessToken", data.token);
+          await AsyncStorage.setItem("jwt_token", data.token);
+          await AsyncStorage.setItem("role", data.role);
         } else {
-          await SecureStore.setItemAsync("accessToken", data.token);
+          await SecureStore.setItemAsync("jwt_token", data.token);
+          await SecureStore.setItemAsync("role", data.role);
         }
+
+        const navigateToDashboard = () => {
+          const role = data.role?.toLowerCase();
+          if (role === "student") {
+            router.replace("/(student)/dashboard");
+          } else if (role === "teacher") {
+            router.replace("/(teacher)/dashboard");
+          } else if (role === "admin") {
+            router.replace("/(admin)/dashboard");
+          } else {
+            router.replace("/(auth)/login");
+          }
+        };
 
         if (data.firstLogin) {
           Alert.alert(
             "Chào mừng!",
             "Đây là lần đăng nhập đầu tiên. Vui lòng đổi mật khẩu.",
+            [
+              {
+                text: "OK",
+                onPress: () => router.replace("/(auth)/ChangePassword"),
+              },
+            ],
           );
         } else {
-          Alert.alert("Thành công", "Đăng nhập thành công!");
+          Alert.alert("Thành công", "Đăng nhập thành công!", [
+            { text: "OK", onPress: navigateToDashboard },
+          ]);
         }
-
-        router.replace("/home");
-      } else {
-        Alert.alert(
-          "Lỗi",
-          data.error || "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.",
-        );
       }
-    } catch (error) {
-      Alert.alert("Lỗi", "Không thể kết nối đến server. Vui lòng thử lại sau.");
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        "Không thể kết nối đến server. Vui lòng thử lại sau.";
+
+      Alert.alert("Lỗi", errorMessage);
     } finally {
       setLoading(false);
     }
@@ -124,7 +139,9 @@ const LoginScreen = () => {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.forgotPassword}>
+          <TouchableOpacity
+            style={styles.forgotPassword}
+            onPress={() => router.push("/(auth)/ForgotPassword")}>
             <Text style={styles.forgotText}>Quên mật khẩu?</Text>
           </TouchableOpacity>
 
@@ -152,33 +169,17 @@ const LoginScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8F9FA",
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 24,
-    justifyContent: "center",
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 40,
-  },
+  container: { flex: 1, backgroundColor: "#F8F9FA" },
+  scrollContent: { flexGrow: 1, padding: 24, justifyContent: "center" },
+  header: { alignItems: "center", marginBottom: 40 },
   welcomeText: {
     fontSize: 28,
     fontWeight: "bold",
     color: "#1F2937",
     marginBottom: 8,
   },
-  subtitle: {
-    fontSize: 16,
-    color: "#6B7280",
-    textAlign: "center",
-  },
-  form: {
-    width: "100%",
-  },
+  subtitle: { fontSize: 16, color: "#6B7280", textAlign: "center" },
+  form: { width: "100%" },
   label: {
     fontSize: 14,
     fontWeight: "600",
@@ -202,23 +203,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  passwordInput: {
-    flex: 1,
-    padding: 16,
-    fontSize: 16,
-  },
-  eyeIcon: {
-    padding: 16,
-  },
-  forgotPassword: {
-    alignSelf: "flex-end",
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  forgotText: {
-    color: "#3B82F6",
-    fontWeight: "600",
-  },
+  passwordInput: { flex: 1, padding: 16, fontSize: 16 },
+  eyeIcon: { padding: 16 },
+  forgotPassword: { alignSelf: "flex-end", marginTop: 8, marginBottom: 24 },
+  forgotText: { color: "#3B82F6", fontWeight: "600" },
   loginButton: {
     backgroundColor: "#2563EB",
     padding: 16,
@@ -226,22 +214,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 24,
   },
-  loginButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  registerLink: {
-    alignItems: "center",
-  },
-  registerText: {
-    color: "#6B7280",
-    fontSize: 14,
-  },
-  registerHighlight: {
-    color: "#2563EB",
-    fontWeight: "600",
-  },
+  loginButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  registerLink: { alignItems: "center" },
+  registerText: { color: "#6B7280", fontSize: 14 },
+  registerHighlight: { color: "#2563EB", fontWeight: "600" },
 });
 
 export default LoginScreen;
