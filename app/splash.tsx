@@ -1,11 +1,9 @@
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 
 export default function SplashScreen() {
-  const [isReady, setIsReady] = useState(false);
-
   useEffect(() => {
     const init = async () => {
       try {
@@ -35,10 +33,8 @@ export default function SplashScreen() {
             router.replace("/login");
         }
       } catch (error) {
-        console.error("Splash screen init error:", error);
+        console.error("Lỗi khởi tạo SplashScreen:", error);
         router.replace("/login");
-      } finally {
-        setIsReady(true);
       }
     };
 
