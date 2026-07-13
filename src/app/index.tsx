@@ -47,16 +47,16 @@ const LoginScreen = () => {
     setLoading(true);
 
     try {
-      const response = await loginAPI({ email, password });
+      const response = await loginAPI({ username: email, password });
       const data = response.data;
 
       if (data.token) {
         if (Platform.OS === "web") {
           await AsyncStorage.setItem("jwt_token", data.token);
-          await AsyncStorage.setItem("role", data.role);
+          await AsyncStorage.setItem("role", data.user.role);
         } else {
           await SecureStore.setItemAsync("jwt_token", data.token);
-          await SecureStore.setItemAsync("role", data.role);
+          await SecureStore.setItemAsync("role", data.user.role);
         }
 
         const navigateToDashboard = () => {

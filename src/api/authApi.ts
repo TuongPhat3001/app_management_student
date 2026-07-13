@@ -1,19 +1,18 @@
+import { LoginRequest } from "../type/auth";
 import api from "./axios";
 
-import { LoginRequest } from "../type/auth";
-
 export const loginAPI = (data: LoginRequest) => {
-  return api.post("/Login", data);
+  return api.post("/login", data);
 };
 
 export const logoutAPI = () => {
-  return api.post("/Logout");
+  return api.post("/logout");
 };
 
 export const forgotPasswordAPI = (email: string) => {
-  return api.post("/ForgotPassword", { email });
+  return api.post("/forgot-password", { email });
 };
 
 export const changePasswordAPI = (data: any) => {
-  return api.post("/ChangePassword", data);
+  return api.post("/change-password", data);
 };
