@@ -1,3 +1,3 @@
 export const env = {
-  apiBaseUrl: "http://192.168.1.196:8080",
+  apiBaseUrl: "http://192.168.1.200:8080",
 };

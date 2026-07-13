@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
-import Colors from "../../theme/colors";
+import Colors from "../theme/colors";
 
 interface Props {
   placeholder: string;

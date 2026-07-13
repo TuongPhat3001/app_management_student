@@ -68,7 +68,7 @@ const LoginScreen = () => {
           } else if (role === "admin") {
             router.replace("/(admin)/Dashboard");
           } else {
-            router.replace("/(auth)/Login");
+            router.replace("/(auth)/login");
           }
         };
 
