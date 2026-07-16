@@ -10,7 +10,7 @@ export default function StudentLayout() {
         headerShown: true,
       }}>
       <Tabs.Screen
-        name="dashboard"
+        name="DashboardStudent"
         options={{
           title: "Trang chủ",
           tabBarIcon: ({ color }) => (
@@ -19,7 +19,7 @@ export default function StudentLayout() {
         }}
       />
       <Tabs.Screen
-        name="schedule"
+        name="ViewSchedule"
         options={{
           title: "Lịch học",
           tabBarIcon: ({ color }) => (
@@ -28,7 +28,7 @@ export default function StudentLayout() {
         }}
       />
       <Tabs.Screen
-        name="transcript"
+        name="ViewTranscript"
         options={{
           title: "Bảng điểm",
           tabBarIcon: ({ color }) => (

@@ -10,7 +10,7 @@ interface ClassOffer {
   status: string;
 }
 
-const ViewSuggestClass: React.FC = () => {
+const ClassOffer: React.FC = () => {
   const [offers, setOffers] = useState<ClassOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -87,4 +87,4 @@ const ViewSuggestClass: React.FC = () => {
   );
 };
 
-export default ViewSuggestClass;
+export default ClassOffer;
