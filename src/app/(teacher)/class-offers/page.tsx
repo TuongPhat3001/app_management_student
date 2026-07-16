@@ -30,7 +30,9 @@ const ViewSuggestClass: React.FC = () => {
 
   const fetchOffers = async () => {
     try {
-      const res = await apiClient.get(`http://192.168.1.224:8080/class-offers`);
+      const res = await apiClient.get("/class-offers");
+
+      console.log("Dữ liệu API trả về:", JSON.stringify(res.data, null, 2));
 
       setOffers(res.data);
     } catch (err: any) {
