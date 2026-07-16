@@ -60,7 +60,7 @@ const LoginScreen = () => {
         }
 
         const navigateToDashboard = () => {
-          const role = data.role?.toLowerCase();
+          const role = data.user.role.toLowerCase();
           if (role === "student") {
             router.replace("/(student)/Dashboard");
           } else if (role === "teacher") {
@@ -72,7 +72,7 @@ const LoginScreen = () => {
           }
         };
 
-        if (data.firstLogin) {
+        if (data.first_login) {
           Alert.alert(
             "Chào mừng!",
             "Đây là lần đăng nhập đầu tiên. Vui lòng đổi mật khẩu.",
@@ -90,14 +90,20 @@ const LoginScreen = () => {
         }
       }
     } catch (error: any) {
-      const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.message ||
-        "Không thể kết nối đến server. Vui lòng thử lại sau.";
+      console.log("======================");
+      console.log(error);
+      console.log(error.message);
+      console.log(error.code);
+      console.log(error.response);
+      console.log(error.response?.data);
+      console.log("======================");
 
-      Alert.alert("Lỗi", errorMessage);
-    } finally {
-      setLoading(false);
+      Alert.alert(
+        "Lỗi",
+        error.reponse?.data?.error ??
+          error.message ??
+          "Đã xảy ra lỗi trong quá trình đăng nhập. Vui lòng thử lại.",
+      );
     }
   };
 

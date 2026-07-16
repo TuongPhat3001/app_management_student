@@ -13,6 +13,10 @@ export const forgotPasswordAPI = (email: string) => {
   return api.post("/forgot-password", { email });
 };
 
-export const changePasswordAPI = (data: any) => {
+export interface ChangePasswordRequest {
+  new_password: string;
+}
+
+export const changePasswordAPI = (data: ChangePasswordRequest) => {
   return api.post("/change-password", data);
 };

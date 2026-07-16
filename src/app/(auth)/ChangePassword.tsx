@@ -12,24 +12,19 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-// Import hàm API đã được bạn định nghĩa trong file authApi.ts
 import { changePasswordAPI } from "../../api/authApi";
 
 const ChangePasswordScreen = () => {
-  const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // State quản lý ẩn/hiện mật khẩu
-  const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
 
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // 3. Hàm Validate dữ liệu (Độ dài, định dạng, trùng khớp)
   const validateForm = () => {
-    if (!oldPassword || !newPassword || !confirmPassword) {
+    if (!newPassword || !confirmPassword) {
       Alert.alert("Lỗi", "Vui lòng nhập đầy đủ các trường mật khẩu.");
       return false;
     }
@@ -39,14 +34,13 @@ const ChangePasswordScreen = () => {
       return false;
     }
 
-    // Kiểm tra định dạng sơ bộ (Ví dụ: Yêu cầu có ít nhất 1 chữ và 1 số)
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
     if (!passwordRegex.test(newPassword)) {
       Alert.alert("Lỗi", "Mật khẩu mới phải bao gồm cả chữ và số.");
       return false;
     }
 
-    if (oldPassword === newPassword) {
+    if (newPassword !== confirmPassword) {
       Alert.alert("Lỗi", "Mật khẩu mới không được trùng với mật khẩu cũ.");
       return false;
     }
@@ -66,31 +60,20 @@ const ChangePasswordScreen = () => {
 
     try {
       const response = await changePasswordAPI({
-        oldPassword,
-        newPassword,
+        new_password: newPassword,
       });
 
-      if (response.data && response.data.success) {
-        Alert.alert(
-          "Thành công 🎉",
-          response.data.message || "Đổi mật khẩu thành công!",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                router.replace("/(auth)/login");
-              },
-            },
-          ],
-        );
-      }
+      Alert.alert("Thành công 🎉", response.data.message, [
+        {
+          text: "OK",
+          onPress: () => router.replace("/(auth)/login"),
+        },
+      ]);
     } catch (error: any) {
-      const errorMessage =
-        error.response?.data?.error ||
-        error.response?.data?.message ||
-        "Đã có lỗi xảy ra. Vui lòng thử lại sau.";
-
-      Alert.alert("Thành công thất bại ❌", errorMessage);
+      Alert.alert(
+        "Lỗi",
+        error.response?.data?.error || "Đổi mật khẩu thất bại.",
+      );
     } finally {
       setLoading(false);
     }
@@ -109,22 +92,6 @@ const ChangePasswordScreen = () => {
         </View>
 
         <View style={styles.form}>
-          <Text style={styles.label}>Mật khẩu hiện tại</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Nhập mật khẩu hiện tại"
-              value={oldPassword}
-              onChangeText={setOldPassword}
-              secureTextEntry={!showOldPassword}
-            />
-            <TouchableOpacity
-              onPress={() => setShowOldPassword(!showOldPassword)}
-              style={styles.eyeIcon}>
-              <Text>{showOldPassword ? "🙈" : "👁️"}</Text>
-            </TouchableOpacity>
-          </View>
-
           <Text style={styles.label}>Mật khẩu mới</Text>
           <View style={styles.passwordContainer}>
             <TextInput
@@ -132,6 +99,22 @@ const ChangePasswordScreen = () => {
               placeholder="Nhập mật khẩu mới"
               value={newPassword}
               onChangeText={setNewPassword}
+              secureTextEntry={!showNewPassword}
+            />
+            <TouchableOpacity
+              onPress={() => setShowNewPassword(!showNewPassword)}
+              style={styles.eyeIcon}>
+              <Text>{showNewPassword ? "🙈" : "👁️"}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>Xác nhận mật khẩu mới</Text>
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Nhập lại mật khẩu mới"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
               secureTextEntry={!showNewPassword}
             />
             <TouchableOpacity
