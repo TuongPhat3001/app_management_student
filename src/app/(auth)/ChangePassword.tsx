@@ -108,7 +108,7 @@ const ChangePasswordScreen = () => {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.label}>Xác nhận mật khẩu mới</Text>
+          <Text style={styles.label}>Xác nhận lại mật khẩu mới</Text>
           <View style={styles.passwordContainer}>
             <TextInput
               style={styles.passwordInput}
@@ -124,19 +124,6 @@ const ChangePasswordScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Xác nhận mật khẩu mới */}
-          <Text style={styles.label}>Xác nhận mật khẩu mới</Text>
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Nhập lại mật khẩu mới"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showNewPassword} // Dùng chung mắt ẩn/hiện với mật khẩu mới
-            />
-          </View>
-
-          {/* Nút bấm hành động */}
           <TouchableOpacity
             style={styles.submitButton}
             onPress={handleChangePassword}
