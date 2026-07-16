@@ -160,12 +160,12 @@ const LoginScreen = () => {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.registerLink}>
+          {/* <TouchableOpacity style={styles.registerLink}>
             <Text style={styles.registerText}>
               Chưa có tài khoản?{" "}
               <Text style={styles.registerHighlight}>Đăng ký</Text>
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 
 const RejectClassOffer: React.FC = () => {
-  const { id } = useParams();
+  // const { id } = useParams();
   const { assignmentId } = useLocalSearchParams<{
     assignmentId: string;
   }>();
@@ -19,7 +19,7 @@ const RejectClassOffer: React.FC = () => {
 
     setLoading(true);
     try {
-      await axios.post(`/class-offers/${id}/reject`, { reason });
+      await axios.post(`/class-offers/${assignmentId}/reject`, { reason });
       setMessage("Đã từ chối lớp thành công");
       setTimeout(() => router.back(), 1500);
     } catch (err: any) {
