@@ -46,11 +46,11 @@ const ViewSuggestClass: React.FC = () => {
   };
 
   const handleAccept = (id: number) => {
-    router.push(`/class-offers/${id}/accept`);
+    router.push(`/class-offers/${id}/accept` as any);
   };
 
   const handleReject = (id: number) => {
-    router.push(`/class-offers/${id}/reject`);
+    router.push(`/class-offers/${id}/reject` as any);
   };
 
   if (loading) {
