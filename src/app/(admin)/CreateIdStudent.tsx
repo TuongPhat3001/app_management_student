@@ -1,116 +1,196 @@
-"use client";
-
-import axios from "axios";
+import apiClient from "@/src/api/axios";
 import React, { useState } from "react";
-import { Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+interface StudentForm {
+  fullName: string;
+  dateOfBirth: string;
+  major: string;
+}
+
+interface CreatedStudent {
+  studentId: string;
+  email: string;
+  defaultPassword: string;
+}
 
 const CreateStudent: React.FC = () => {
-  const [formData, setFormData] = useState({
+  const [loading, setLoading] = useState(false);
+
+  const [formData, setFormData] = useState<StudentForm>({
     fullName: "",
     dateOfBirth: "",
     major: "",
   });
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [createdInfo, setCreatedInfo] = useState<any>(null);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const [createdInfo, setCreatedInfo] = useState<CreatedStudent | null>(null);
+
+  const handleChange = (field: keyof StudentForm, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    if (!formData.fullName || !formData.dateOfBirth || !formData.major) {
+      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin.");
+      return;
+    }
+
     setLoading(true);
-    setMessage("");
     setCreatedInfo(null);
 
     try {
-      const res = await axios.post("/students", formData);
+      const res = await apiClient.post("/students", formData);
+
       setCreatedInfo(res.data);
-      setMessage("Tạo sinh viên thành công!");
-      setFormData({ fullName: "", dateOfBirth: "", major: "" });
-    } catch (err: any) {
-      setMessage(err.response?.data?.message || "Tạo sinh viên thất bại");
+
+      Alert.alert("Thành công", "Tạo sinh viên thành công!");
+
+      setFormData({
+        fullName: "",
+        dateOfBirth: "",
+        major: "",
+      });
+    } catch (error: any) {
+      Alert.alert(
+        "Lỗi",
+        error?.response?.data?.message || "Tạo sinh viên thất bại.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View className="max-w-2xl mx-auto p-8">
-      <Text className="text-3xl font-bold mb-8">Tạo Tài Khoản Sinh Viên</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Tạo Tài Khoản Sinh Viên</Text>
 
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-2xl shadow space-y-6">
-        <View>
-          <Text className="block text-sm font-medium mb-2">Họ và tên</Text>
-          <input
-            type="text"
-            name="fullName"
-            value={formData.fullName}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 rounded-xl p-4"
-          />
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Họ và tên"
+          value={formData.fullName}
+          onChangeText={(text) => handleChange("fullName", text)}
+        />
 
-        <View>
-          <Text className="block text-sm font-medium mb-2">Ngày sinh</Text>
-          <input
-            type="date"
-            name="dateOfBirth"
-            value={formData.dateOfBirth}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 rounded-xl p-4"
-          />
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Ngày sinh (YYYY-MM-DD)"
+          value={formData.dateOfBirth}
+          onChangeText={(text) => handleChange("dateOfBirth", text)}
+        />
 
-        <View>
-          <Text className="block text-sm font-medium mb-2">Ngành học</Text>
-          <input
-            type="text"
-            name="major"
-            value={formData.major}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 rounded-xl p-4"
-          />
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Ngành học"
+          value={formData.major}
+          onChangeText={(text) => handleChange("major", text)}
+        />
 
-        <button
-          type="submit"
+        <TouchableOpacity
+          style={[styles.button, loading && { opacity: 0.7 }]}
           disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-semibold text-lg">
-          {loading ? "Đang tạo..." : "Tạo Sinh Viên"}
-        </button>
-      </form>
+          onPress={handleSubmit}>
+          {loading ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.buttonText}>Tạo Sinh Viên</Text>
+          )}
+        </TouchableOpacity>
 
-      {message && (
-        <Text className="mt-6 text-center text-lg font-medium">{message}</Text>
-      )}
+        {createdInfo && (
+          <View style={styles.resultBox}>
+            <Text style={styles.resultTitle}>Thông tin tài khoản đã tạo</Text>
 
-      {createdInfo && (
-        <View className="mt-8 p-6 bg-green-50 border border-green-200 rounded-xl">
-          <Text className="font-semibold mb-3">
-            Thông tin tài khoản đã tạo:
-          </Text>
-          <Text>
-            <strong>MSSV:</strong> {createdInfo.studentId}
-          </Text>
-          <Text>
-            <strong>Email:</strong> {createdInfo.email}
-          </Text>
-          <Text>
-            <strong>Mật khẩu mặc định:</strong> {createdInfo.defaultPassword}
-          </Text>
-        </View>
-      )}
-    </View>
+            <Text style={styles.resultText}>MSSV: {createdInfo.studentId}</Text>
+
+            <Text style={styles.resultText}>Email: {createdInfo.email}</Text>
+
+            <Text style={styles.resultText}>
+              Mật khẩu mặc định: {createdInfo.defaultPassword}
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 export default CreateStudent;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    padding: 20,
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 25,
+    color: "#111827",
+  },
+
+  input: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginBottom: 15,
+    fontSize: 16,
+  },
+
+  button: {
+    backgroundColor: "#2563EB",
+    borderRadius: 10,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 10,
+  },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  resultBox: {
+    marginTop: 25,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    borderRadius: 10,
+    padding: 15,
+  },
+
+  resultTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 10,
+    color: "#065F46",
+  },
+
+  resultText: {
+    fontSize: 16,
+    marginBottom: 6,
+    color: "#111827",
+  },
+});

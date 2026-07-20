@@ -1,154 +1,194 @@
-import axios from "axios";
+import apiClient from "@/src/api/axios";
 import React, { useState } from "react";
-import { Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+} from "react-native";
+
+interface CreateClassRequest {
+  classCode: string;
+  className: string;
+  courseId: string;
+  semester: string;
+  academicYear: string;
+  capacity: string;
+}
 
 const CreateClass: React.FC = () => {
-  const [formData, setFormData] = useState({
+  const [loading, setLoading] = useState(false);
+
+  const [formData, setFormData] = useState<CreateClassRequest>({
     classCode: "",
     className: "",
     courseId: "",
     semester: "",
     academicYear: "",
-    capacity: 0,
+    capacity: "",
   });
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    const { name, value } = e.target;
+  const handleChange = (field: keyof CreateClassRequest, value: string) => {
     setFormData((prev) => ({
       ...prev,
-      [name]: name === "capacity" ? parseInt(value) : value,
+      [field]: value,
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    if (
+      !formData.classCode ||
+      !formData.className ||
+      !formData.courseId ||
+      !formData.semester ||
+      !formData.academicYear ||
+      !formData.capacity
+    ) {
+      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin.");
+      return;
+    }
+
     setLoading(true);
-    setMessage("");
 
     try {
-      await axios.post("/classes", formData);
-      setMessage("Tạo lớp học thành công!");
+      await apiClient.post("/classes", {
+        classCode: formData.classCode,
+        className: formData.className,
+        courseId: Number(formData.courseId),
+        semester: formData.semester,
+        academicYear: formData.academicYear,
+        capacity: Number(formData.capacity),
+      });
+
+      Alert.alert("Thành công", "Tạo lớp học thành công!");
+
       setFormData({
         classCode: "",
         className: "",
         courseId: "",
         semester: "",
         academicYear: "",
-        capacity: 0,
+        capacity: "",
       });
-    } catch (err: any) {
-      setMessage(err.response?.data?.message || "Lỗi khi tạo lớp học");
+    } catch (error: any) {
+      Alert.alert(
+        "Lỗi",
+        error?.response?.data?.message || "Không thể tạo lớp học.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View className="max-w-2xl mx-auto p-6">
-      <Text className="text-3xl font-bold mb-8">Tạo Lớp Học Mới</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Tạo Lớp Học Mới</Text>
 
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-6 bg-white p-8 rounded-xl shadow">
-        <View>
-          <Text className="block text-sm font-medium mb-1">Mã lớp</Text>
-          <input
-            type="text"
-            name="classCode"
-            value={formData.classCode}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 rounded-lg p-3"
-          />
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Mã lớp"
+          value={formData.classCode}
+          onChangeText={(text) => handleChange("classCode", text)}
+        />
 
-        <View>
-          <Text className="block text-sm font-medium mb-1">Tên lớp</Text>
-          <input
-            type="text"
-            name="className"
-            value={formData.className}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 rounded-lg p-3"
-          />
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Tên lớp"
+          value={formData.className}
+          onChangeText={(text) => handleChange("className", text)}
+        />
 
-        <View className="grid grid-cols-2 gap-4">
-          <View>
-            <Text className="block text-sm font-medium mb-1">Môn học</Text>
-            <input
-              type="text"
-              name="courseId"
-              value={formData.courseId}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-lg p-3"
-              placeholder="Nhập ID môn học"
-            />
-          </View>
+        <TextInput
+          style={styles.input}
+          placeholder="ID môn học"
+          keyboardType="numeric"
+          value={formData.courseId}
+          onChangeText={(text) => handleChange("courseId", text)}
+        />
 
-          <View>
-            <Text className="block text-sm font-medium mb-1">Học kỳ</Text>
-            <input
-              type="text"
-              name="semester"
-              value={formData.semester}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-lg p-3"
-            />
-          </View>
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Học kỳ"
+          value={formData.semester}
+          onChangeText={(text) => handleChange("semester", text)}
+        />
 
-        <View className="grid grid-cols-2 gap-4">
-          <View>
-            <Text className="block text-sm font-medium mb-1">Năm học</Text>
-            <input
-              type="text"
-              name="academicYear"
-              value={formData.academicYear}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-lg p-3"
-              placeholder="2025-2026"
-            />
-          </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Năm học (VD: 2025-2026)"
+          value={formData.academicYear}
+          onChangeText={(text) => handleChange("academicYear", text)}
+        />
 
-          <View>
-            <Text className="block text-sm font-medium mb-1">Sức chứa</Text>
-            <input
-              type="number"
-              name="capacity"
-              value={formData.capacity}
-              onChange={handleChange}
-              required
-              min="1"
-              className="w-full border border-gray-300 rounded-lg p-3"
-            />
-          </View>
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Sức chứa"
+          keyboardType="numeric"
+          value={formData.capacity}
+          onChangeText={(text) => handleChange("capacity", text)}
+        />
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 rounded-lg transition">
-          {loading ? "Đang tạo..." : "Tạo lớp học"}
-        </button>
-
-        {message && (
-          <Text
-            className={`text-center font-medium ${message.includes("thành công") ? "text-green-600" : "text-red-600"}`}>
-            {message}
-          </Text>
-        )}
-      </form>
-    </View>
+        <TouchableOpacity
+          style={[styles.button, loading && { opacity: 0.7 }]}
+          onPress={handleSubmit}
+          disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Tạo lớp học</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 export default CreateClass;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    padding: 20,
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 25,
+    color: "#111827",
+  },
+
+  input: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginBottom: 15,
+    fontSize: 16,
+  },
+
+  button: {
+    marginTop: 10,
+    backgroundColor: "#2563EB",
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+});

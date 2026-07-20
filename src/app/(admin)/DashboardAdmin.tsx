@@ -69,7 +69,7 @@ const DashboardAdmin: React.FC = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.header}>Dashboard Quản Trị Viên</Text>
+      <Text style={styles.header}>Quản Trị Viên</Text>
 
       <Card title="Tổng sinh viên" value={stats.totalStudents} />
       <Card title="Tổng giảng viên" value={stats.totalTeachers} />
