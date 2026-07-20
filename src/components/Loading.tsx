@@ -1,4 +1,5 @@
 import React from "react";
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from "react-native";
 
 interface LoadingProps {
   size?: "small" | "medium" | "large";
@@ -13,38 +14,59 @@ const Loading: React.FC<LoadingProps> = ({
   fullScreen = false,
   overlay = false,
 }) => {
-  const sizeClasses = {
-    small: "w-6 h-6",
-    medium: "w-10 h-10",
-    large: "w-14 h-14",
-  };
+  const indicatorSize =
+    size === "small" ? "small" : ("large" as "small" | "large");
 
   const content = (
-    <div className="flex flex-col items-center justify-center">
-      <div
-        className={`animate-spin rounded-full border-4 border-gray-200 border-t-blue-600 ${sizeClasses[size]}`}
-      />
-      {text && <p className="mt-4 text-gray-600 text-sm font-medium">{text}</p>}
-    </div>
+    <View style={styles.content}>
+      <ActivityIndicator size={indicatorSize} color="#2563EB" />
+
+      {text ? <Text style={styles.text}>{text}</Text> : null}
+    </View>
   );
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 bg-white/90 flex items-center justify-center z-50">
-        {content}
-      </div>
+      <Modal transparent visible animationType="fade">
+        <View style={styles.fullScreen}>{content}</View>
+      </Modal>
     );
   }
 
   if (overlay) {
-    return (
-      <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-40">
-        {content}
-      </div>
-    );
+    return <View style={styles.overlay}>{content}</View>;
   }
 
   return content;
 };
 
 export default Loading;
+
+const styles = StyleSheet.create({
+  fullScreen: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 999,
+  },
+
+  content: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  text: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#4B5563",
+    fontWeight: "500",
+  },
+});
