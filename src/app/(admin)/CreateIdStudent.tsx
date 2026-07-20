@@ -2,6 +2,7 @@
 
 import axios from "axios";
 import React, { useState } from "react";
+import { Text, View } from "react-native";
 
 const CreateStudent: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -38,14 +39,14 @@ const CreateStudent: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-8">
-      <h1 className="text-3xl font-bold mb-8">Tạo Tài Khoản Sinh Viên</h1>
+    <View className="max-w-2xl mx-auto p-8">
+      <Text className="text-3xl font-bold mb-8">Tạo Tài Khoản Sinh Viên</Text>
 
       <form
         onSubmit={handleSubmit}
         className="bg-white p-8 rounded-2xl shadow space-y-6">
-        <div>
-          <label className="block text-sm font-medium mb-2">Họ và tên</label>
+        <View>
+          <Text className="block text-sm font-medium mb-2">Họ và tên</Text>
           <input
             type="text"
             name="fullName"
@@ -54,10 +55,10 @@ const CreateStudent: React.FC = () => {
             required
             className="w-full border border-gray-300 rounded-xl p-4"
           />
-        </div>
+        </View>
 
-        <div>
-          <label className="block text-sm font-medium mb-2">Ngày sinh</label>
+        <View>
+          <Text className="block text-sm font-medium mb-2">Ngày sinh</Text>
           <input
             type="date"
             name="dateOfBirth"
@@ -66,10 +67,10 @@ const CreateStudent: React.FC = () => {
             required
             className="w-full border border-gray-300 rounded-xl p-4"
           />
-        </div>
+        </View>
 
-        <div>
-          <label className="block text-sm font-medium mb-2">Ngành học</label>
+        <View>
+          <Text className="block text-sm font-medium mb-2">Ngành học</Text>
           <input
             type="text"
             name="major"
@@ -78,7 +79,7 @@ const CreateStudent: React.FC = () => {
             required
             className="w-full border border-gray-300 rounded-xl p-4"
           />
-        </div>
+        </View>
 
         <button
           type="submit"
@@ -89,24 +90,26 @@ const CreateStudent: React.FC = () => {
       </form>
 
       {message && (
-        <p className="mt-6 text-center text-lg font-medium">{message}</p>
+        <Text className="mt-6 text-center text-lg font-medium">{message}</Text>
       )}
 
       {createdInfo && (
-        <div className="mt-8 p-6 bg-green-50 border border-green-200 rounded-xl">
-          <h3 className="font-semibold mb-3">Thông tin tài khoản đã tạo:</h3>
-          <p>
+        <View className="mt-8 p-6 bg-green-50 border border-green-200 rounded-xl">
+          <Text className="font-semibold mb-3">
+            Thông tin tài khoản đã tạo:
+          </Text>
+          <Text>
             <strong>MSSV:</strong> {createdInfo.studentId}
-          </p>
-          <p>
+          </Text>
+          <Text>
             <strong>Email:</strong> {createdInfo.email}
-          </p>
-          <p>
+          </Text>
+          <Text>
             <strong>Mật khẩu mặc định:</strong> {createdInfo.defaultPassword}
-          </p>
-        </div>
+          </Text>
+        </View>
       )}
-    </div>
+    </View>
   );
 };
 

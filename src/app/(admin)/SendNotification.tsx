@@ -1,5 +1,6 @@
 import axios from "axios";
 import React, { useState } from "react";
+import { Text, View } from "react-native";
 
 const SendNotificationToEmail: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -38,14 +39,14 @@ const SendNotificationToEmail: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8">Gửi Thông Báo Qua Email</h1>
+    <View className="max-w-3xl mx-auto p-6">
+      <Text className="text-3xl font-bold mb-8">Gửi Thông Báo Qua Email</Text>
 
       <form
         onSubmit={handleSubmit}
         className="bg-white p-8 rounded-xl shadow space-y-6">
-        <div>
-          <label className="block text-sm font-medium mb-2">Tiêu đề</label>
+        <View>
+          <Text className="block text-sm font-medium mb-2">Tiêu đề</Text>
           <input
             type="text"
             name="title"
@@ -54,10 +55,10 @@ const SendNotificationToEmail: React.FC = () => {
             className="w-full border border-gray-300 rounded-lg p-3"
             required
           />
-        </div>
+        </View>
 
-        <div>
-          <label className="block text-sm font-medium mb-2">Nội dung</label>
+        <View>
+          <Text className="block text-sm font-medium mb-2">Nội dung</Text>
           <textarea
             name="content"
             value={formData.content}
@@ -66,12 +67,10 @@ const SendNotificationToEmail: React.FC = () => {
             className="w-full border border-gray-300 rounded-lg p-3"
             required
           />
-        </div>
+        </View>
 
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Đối tượng nhận
-          </label>
+        <View>
+          <Text className="block text-sm font-medium mb-2">Đối tượng nhận</Text>
           <select
             name="target"
             value={formData.target}
@@ -82,7 +81,7 @@ const SendNotificationToEmail: React.FC = () => {
             <option value="teacher">Giảng viên</option>
             <option value="admin">Quản trị viên</option>
           </select>
-        </div>
+        </View>
 
         <button
           type="submit"
@@ -92,13 +91,13 @@ const SendNotificationToEmail: React.FC = () => {
         </button>
 
         {message && (
-          <p
+          <Text
             className={`text-center font-medium ${message.includes("thành công") ? "text-green-600" : "text-red-600"}`}>
             {message}
-          </p>
+          </Text>
         )}
       </form>
-    </div>
+    </View>
   );
 };
 

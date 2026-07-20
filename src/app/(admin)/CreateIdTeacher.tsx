@@ -2,6 +2,7 @@
 
 import axios from "axios";
 import React, { useState } from "react";
+import { Text, View } from "react-native";
 
 const CreateTeacher: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -35,14 +36,14 @@ const CreateTeacher: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-8">
-      <h1 className="text-3xl font-bold mb-8">Tạo Tài Khoản Giảng Viên</h1>
+    <View className="max-w-2xl mx-auto p-8">
+      <Text className="text-3xl font-bold mb-8">Tạo Tài Khoản Giảng Viên</Text>
 
       <form
         onSubmit={handleSubmit}
         className="bg-white p-8 rounded-2xl shadow space-y-6">
-        <div>
-          <label className="block text-sm font-medium mb-2">Họ và tên</label>
+        <View>
+          <Text className="block text-sm font-medium mb-2">Họ và tên</Text>
           <input
             type="text"
             name="fullName"
@@ -51,13 +52,13 @@ const CreateTeacher: React.FC = () => {
             required
             className="w-full border border-gray-300 rounded-xl p-4"
           />
-        </div>
+        </View>
 
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium mb-2">
+        <View className="grid grid-cols-2 gap-6">
+          <View>
+            <Text className="block text-sm font-medium mb-2">
               Khoa / Bộ môn
-            </label>
+            </Text>
             <input
               type="text"
               name="department"
@@ -66,11 +67,9 @@ const CreateTeacher: React.FC = () => {
               required
               className="w-full border border-gray-300 rounded-xl p-4"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Chuyên ngành
-            </label>
+          </View>
+          <View>
+            <Text className="block text-sm font-medium mb-2">Chuyên ngành</Text>
             <input
               type="text"
               name="specialization"
@@ -79,11 +78,11 @@ const CreateTeacher: React.FC = () => {
               required
               className="w-full border border-gray-300 rounded-xl p-4"
             />
-          </div>
-        </div>
+          </View>
+        </View>
 
-        <div>
-          <label className="block text-sm font-medium mb-2">Năm công tác</label>
+        <View>
+          <Text className="block text-sm font-medium mb-2">Năm công tác</Text>
           <input
             type="text"
             name="joinYear"
@@ -92,7 +91,7 @@ const CreateTeacher: React.FC = () => {
             placeholder="2023"
             className="w-full border border-gray-300 rounded-xl p-4"
           />
-        </div>
+        </View>
 
         <button
           type="submit"
@@ -103,17 +102,17 @@ const CreateTeacher: React.FC = () => {
       </form>
 
       {createdInfo && (
-        <div className="mt-8 p-6 bg-green-50 border border-green-200 rounded-xl">
-          <h3 className="font-semibold mb-3">Thông tin đã tạo:</h3>
-          <p>
+        <View className="mt-8 p-6 bg-green-50 border border-green-200 rounded-xl">
+          <Text className="font-semibold mb-3">Thông tin đã tạo:</Text>
+          <Text>
             <strong>Mã GV:</strong> {createdInfo.teacherId}
-          </p>
-          <p>
+          </Text>
+          <Text>
             <strong>Email:</strong> {createdInfo.email}
-          </p>
-        </div>
+          </Text>
+        </View>
       )}
-    </div>
+    </View>
   );
 };
 

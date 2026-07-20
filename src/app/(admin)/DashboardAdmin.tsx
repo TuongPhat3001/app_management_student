@@ -1,16 +1,32 @@
-"use client";
-
 import axios from "axios";
+import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+interface DashboardStats {
+  totalStudents: number;
+  totalTeachers: number;
+  totalClasses: number;
+  pendingAssignments: number;
+  newNotifications: number;
+}
 
 const DashboardAdmin: React.FC = () => {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     totalTeachers: 0,
     totalClasses: 0,
     pendingAssignments: 0,
     newNotifications: 0,
   });
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,84 +37,161 @@ const DashboardAdmin: React.FC = () => {
     try {
       const res = await axios.get("/dashboard/admin");
       setStats(res.data);
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.log("Dashboard Error:", error);
     } finally {
       setLoading(false);
     }
   };
 
+  const Card = ({
+    title,
+    value,
+    color = "#111827",
+  }: {
+    title: string;
+    value: number;
+    color?: string;
+  }) => (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      <Text style={[styles.cardValue, { color }]}>{value}</Text>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#2563EB" />
+      </View>
+    );
+  }
+
   return (
-    <div className="p-8">
-      <h1 className="text-4xl font-bold mb-10">Dashboard Quản Trị Viên</h1>
+    <ScrollView style={styles.container}>
+      <Text style={styles.header}>Dashboard Quản Trị Viên</Text>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow">
-          <p className="text-gray-500">Tổng sinh viên</p>
-          <p className="text-4xl font-bold mt-2">{stats.totalStudents}</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow">
-          <p className="text-gray-500">Tổng giảng viên</p>
-          <p className="text-4xl font-bold mt-2">{stats.totalTeachers}</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow">
-          <p className="text-gray-500">Tổng lớp học</p>
-          <p className="text-4xl font-bold mt-2">{stats.totalClasses}</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow">
-          <p className="text-gray-500">Lớp chờ phân công</p>
-          <p className="text-4xl font-bold mt-2 text-orange-600">
-            {stats.pendingAssignments}
-          </p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow">
-          <p className="text-gray-500">Thông báo mới</p>
-          <p className="text-4xl font-bold mt-2 text-blue-600">
-            {stats.newNotifications}
-          </p>
-        </div>
-      </div>
+      <Card title="Tổng sinh viên" value={stats.totalStudents} />
+      <Card title="Tổng giảng viên" value={stats.totalTeachers} />
+      <Card title="Tổng lớp học" value={stats.totalClasses} />
+      <Card
+        title="Lớp chờ phân công"
+        value={stats.pendingAssignments}
+        color="#EA580C"
+      />
+      <Card
+        title="Thông báo mới"
+        value={stats.newNotifications}
+        color="#2563EB"
+      />
 
-      <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-8 rounded-2xl shadow">
-          <h2 className="text-xl font-semibold mb-6">Quản lý nhanh</h2>
-          <div className="space-y-4">
-            <a
-              href="/admin/students/create"
-              className="block p-4 border rounded-xl hover:bg-gray-50">
-              + Tạo sinh viên mới
-            </a>
-            <a
-              href="/admin/teachers/create"
-              className="block p-4 border rounded-xl hover:bg-gray-50">
-              + Tạo giảng viên mới
-            </a>
-            <a
-              href="/admin/classes/create"
-              className="block p-4 border rounded-xl hover:bg-gray-50">
-              + Tạo lớp học mới
-            </a>
-          </div>
-        </div>
+      <Text style={styles.sectionTitle}>Quản lý nhanh</Text>
 
-        <div className="bg-white p-8 rounded-2xl shadow">
-          <h2 className="text-xl font-semibold mb-6">Chức năng chính</h2>
-          <div className="space-y-4">
-            <a
-              href="/admin/assign-teacher"
-              className="block p-4 border rounded-xl hover:bg-gray-50">
-              Phân công giảng viên
-            </a>
-            <a
-              href="/admin/notifications/send"
-              className="block p-4 border rounded-xl hover:bg-gray-50">
-              Gửi thông báo
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() =>
+          router.push({ pathname: "(/admin)/CreateStudent" } as any)
+        }>
+        <Text style={styles.buttonText}>+ Tạo sinh viên mới</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() =>
+          router.push({ pathname: "(/admin)/CreateTeacher" } as any)
+        }>
+        <Text style={styles.buttonText}>+ Tạo giảng viên mới</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() =>
+          router.push({ pathname: "(/admin)/CreateClass" } as any)
+        }>
+        <Text style={styles.buttonText}>+ Tạo lớp học mới</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.sectionTitle}>Chức năng chính</Text>
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() =>
+          router.push({ pathname: "(/admin)/AssignTeacher" } as any)
+        }>
+        <Text style={styles.buttonText}>Phân công giảng viên</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() =>
+          router.push({ pathname: "(/admin)/SendNotification" } as any)
+        }>
+        <Text style={styles.buttonText}>Gửi thông báo</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 };
 
 export default DashboardAdmin;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    padding: 16,
+  },
+
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  header: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#111827",
+  },
+
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 15,
+    elevation: 3,
+  },
+
+  cardTitle: {
+    color: "#6B7280",
+    fontSize: 15,
+  },
+
+  cardValue: {
+    marginTop: 8,
+    fontSize: 32,
+    fontWeight: "bold",
+  },
+
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginTop: 25,
+    marginBottom: 12,
+    color: "#111827",
+  },
+
+  button: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    elevation: 2,
+  },
+
+  buttonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+  },
+});

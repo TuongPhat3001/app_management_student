@@ -1,5 +1,6 @@
 import axios from "axios";
 import React, { useState } from "react";
+import { Text, View } from "react-native";
 
 const CreateClass: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -47,14 +48,14 @@ const CreateClass: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8">Tạo Lớp Học Mới</h1>
+    <View className="max-w-2xl mx-auto p-6">
+      <Text className="text-3xl font-bold mb-8">Tạo Lớp Học Mới</Text>
 
       <form
         onSubmit={handleSubmit}
         className="space-y-6 bg-white p-8 rounded-xl shadow">
-        <div>
-          <label className="block text-sm font-medium mb-1">Mã lớp</label>
+        <View>
+          <Text className="block text-sm font-medium mb-1">Mã lớp</Text>
           <input
             type="text"
             name="classCode"
@@ -63,10 +64,10 @@ const CreateClass: React.FC = () => {
             required
             className="w-full border border-gray-300 rounded-lg p-3"
           />
-        </div>
+        </View>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Tên lớp</label>
+        <View>
+          <Text className="block text-sm font-medium mb-1">Tên lớp</Text>
           <input
             type="text"
             name="className"
@@ -75,11 +76,11 @@ const CreateClass: React.FC = () => {
             required
             className="w-full border border-gray-300 rounded-lg p-3"
           />
-        </div>
+        </View>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Môn học</label>
+        <View className="grid grid-cols-2 gap-4">
+          <View>
+            <Text className="block text-sm font-medium mb-1">Môn học</Text>
             <input
               type="text"
               name="courseId"
@@ -89,10 +90,10 @@ const CreateClass: React.FC = () => {
               className="w-full border border-gray-300 rounded-lg p-3"
               placeholder="Nhập ID môn học"
             />
-          </div>
+          </View>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Học kỳ</label>
+          <View>
+            <Text className="block text-sm font-medium mb-1">Học kỳ</Text>
             <input
               type="text"
               name="semester"
@@ -101,12 +102,12 @@ const CreateClass: React.FC = () => {
               required
               className="w-full border border-gray-300 rounded-lg p-3"
             />
-          </div>
-        </div>
+          </View>
+        </View>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Năm học</label>
+        <View className="grid grid-cols-2 gap-4">
+          <View>
+            <Text className="block text-sm font-medium mb-1">Năm học</Text>
             <input
               type="text"
               name="academicYear"
@@ -116,10 +117,10 @@ const CreateClass: React.FC = () => {
               className="w-full border border-gray-300 rounded-lg p-3"
               placeholder="2025-2026"
             />
-          </div>
+          </View>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Sức chứa</label>
+          <View>
+            <Text className="block text-sm font-medium mb-1">Sức chứa</Text>
             <input
               type="number"
               name="capacity"
@@ -129,8 +130,8 @@ const CreateClass: React.FC = () => {
               min="1"
               className="w-full border border-gray-300 rounded-lg p-3"
             />
-          </div>
-        </div>
+          </View>
+        </View>
 
         <button
           type="submit"
@@ -140,13 +141,13 @@ const CreateClass: React.FC = () => {
         </button>
 
         {message && (
-          <p
+          <Text
             className={`text-center font-medium ${message.includes("thành công") ? "text-green-600" : "text-red-600"}`}>
             {message}
-          </p>
+          </Text>
         )}
       </form>
-    </div>
+    </View>
   );
 };
 

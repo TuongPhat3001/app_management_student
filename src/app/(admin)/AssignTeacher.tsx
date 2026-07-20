@@ -1,5 +1,6 @@
 import axios from "axios";
 import React, { useState } from "react";
+import { Text, View } from "react-native";
 
 const AssignTeacher: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -37,14 +38,14 @@ const AssignTeacher: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8">Phân Công Giảng Viên</h1>
+    <View className="max-w-2xl mx-auto p-6">
+      <Text className="text-3xl font-bold mb-8">Phân Công Giảng Viên</Text>
 
       <form
         onSubmit={handleSubmit}
         className="space-y-6 bg-white p-8 rounded-xl shadow">
-        <div>
-          <label className="block text-sm font-medium mb-1">Lớp học</label>
+        <View>
+          <Text className="block text-sm font-medium mb-1">Lớp học</Text>
           <input
             type="text"
             name="classId"
@@ -54,10 +55,10 @@ const AssignTeacher: React.FC = () => {
             className="w-full border border-gray-300 rounded-lg p-3"
             placeholder="Nhập ID lớp"
           />
-        </div>
+        </View>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Giảng viên</label>
+        <View>
+          <Text className="block text-sm font-medium mb-1">Giảng viên</Text>
           <input
             type="text"
             name="teacherId"
@@ -67,13 +68,13 @@ const AssignTeacher: React.FC = () => {
             className="w-full border border-gray-300 rounded-lg p-3"
             placeholder="Nhập ID giảng viên"
           />
-        </div>
+        </View>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">
+        <View className="grid grid-cols-2 gap-4">
+          <View>
+            <Text className="block text-sm font-medium mb-1">
               Thời gian bắt đầu
-            </label>
+            </Text>
             <input
               type="datetime-local"
               name="startTime"
@@ -82,11 +83,11 @@ const AssignTeacher: React.FC = () => {
               required
               className="w-full border border-gray-300 rounded-lg p-3"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">
+          </View>
+          <View>
+            <Text className="block text-sm font-medium mb-1">
               Thời gian kết thúc
-            </label>
+            </Text>
             <input
               type="datetime-local"
               name="endTime"
@@ -95,8 +96,8 @@ const AssignTeacher: React.FC = () => {
               required
               className="w-full border border-gray-300 rounded-lg p-3"
             />
-          </div>
-        </div>
+          </View>
+        </View>
 
         <button
           type="submit"
@@ -106,12 +107,12 @@ const AssignTeacher: React.FC = () => {
         </button>
 
         {message && (
-          <p className="text-center mt-4 font-medium text-green-600">
+          <Text className="text-center mt-4 font-medium text-green-600">
             {message}
-          </p>
+          </Text>
         )}
       </form>
-    </div>
+    </View>
   );
 };
 
