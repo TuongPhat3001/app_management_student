@@ -1,119 +1,169 @@
-import axios from "axios";
+import apiClient from "@/src/api/axios";
 import React, { useState } from "react";
-import { Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+} from "react-native";
+
+interface AssignTeacherForm {
+  classId: string;
+  teacherId: string;
+  startTime: string;
+  endTime: string;
+}
 
 const AssignTeacher: React.FC = () => {
-  const [formData, setFormData] = useState({
+  const [loading, setLoading] = useState(false);
+
+  const [formData, setFormData] = useState<AssignTeacherForm>({
     classId: "",
     teacherId: "",
     startTime: "",
     endTime: "",
   });
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (field: keyof AssignTeacherForm, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    if (
+      !formData.classId ||
+      !formData.teacherId ||
+      !formData.startTime ||
+      !formData.endTime
+    ) {
+      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin.");
+      return;
+    }
+
     setLoading(true);
-    setMessage("");
 
     try {
-      await axios.put(`/classes/${formData.classId}/assign-teacher`, {
-        teacherId: formData.teacherId,
+      await apiClient.put(`/classes/${formData.classId}/assign-teacher`, {
+        teacherId: Number(formData.teacherId),
         startTime: formData.startTime,
         endTime: formData.endTime,
       });
-      setMessage("Phân công giảng viên thành công!");
-    } catch (err: any) {
-      setMessage(err.response?.data?.message || "Phân công thất bại");
+
+      Alert.alert("Thành công", "Phân công giảng viên thành công!");
+
+      setFormData({
+        classId: "",
+        teacherId: "",
+        startTime: "",
+        endTime: "",
+      });
+    } catch (error: any) {
+      Alert.alert(
+        "Lỗi",
+        error?.response?.data?.message || "Phân công thất bại.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View className="max-w-2xl mx-auto p-6">
-      <Text className="text-3xl font-bold mb-8">Phân Công Giảng Viên</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Phân Công Giảng Viên</Text>
 
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-6 bg-white p-8 rounded-xl shadow">
-        <View>
-          <Text className="block text-sm font-medium mb-1">Lớp học</Text>
-          <input
-            type="text"
-            name="classId"
-            value={formData.classId}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 rounded-lg p-3"
-            placeholder="Nhập ID lớp"
-          />
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="ID lớp học"
+          keyboardType="numeric"
+          value={formData.classId}
+          onChangeText={(text) => handleChange("classId", text)}
+        />
 
-        <View>
-          <Text className="block text-sm font-medium mb-1">Giảng viên</Text>
-          <input
-            type="text"
-            name="teacherId"
-            value={formData.teacherId}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 rounded-lg p-3"
-            placeholder="Nhập ID giảng viên"
-          />
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="ID giảng viên"
+          keyboardType="numeric"
+          value={formData.teacherId}
+          onChangeText={(text) => handleChange("teacherId", text)}
+        />
 
-        <View className="grid grid-cols-2 gap-4">
-          <View>
-            <Text className="block text-sm font-medium mb-1">
-              Thời gian bắt đầu
-            </Text>
-            <input
-              type="datetime-local"
-              name="startTime"
-              value={formData.startTime}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-lg p-3"
-            />
-          </View>
-          <View>
-            <Text className="block text-sm font-medium mb-1">
-              Thời gian kết thúc
-            </Text>
-            <input
-              type="datetime-local"
-              name="endTime"
-              value={formData.endTime}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded-lg p-3"
-            />
-          </View>
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Thời gian bắt đầu (YYYY-MM-DD HH:mm)"
+          value={formData.startTime}
+          onChangeText={(text) => handleChange("startTime", text)}
+        />
 
-        <button
-          type="submit"
+        <TextInput
+          style={styles.input}
+          placeholder="Thời gian kết thúc (YYYY-MM-DD HH:mm)"
+          value={formData.endTime}
+          onChangeText={(text) => handleChange("endTime", text)}
+        />
+
+        <TouchableOpacity
+          style={[styles.button, loading && { opacity: 0.7 }]}
           disabled={loading}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 rounded-lg">
-          {loading ? "Đang phân công..." : "Phân công giảng viên"}
-        </button>
-
-        {message && (
-          <Text className="text-center mt-4 font-medium text-green-600">
-            {message}
-          </Text>
-        )}
-      </form>
-    </View>
+          onPress={handleSubmit}>
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Phân công giảng viên</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 export default AssignTeacher;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    padding: 20,
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 25,
+    color: "#111827",
+  },
+
+  input: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginBottom: 15,
+    fontSize: 16,
+  },
+
+  button: {
+    backgroundColor: "#4F46E5",
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 10,
+  },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+});
