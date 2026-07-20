@@ -1,104 +1,178 @@
-import axios from "axios";
+import apiClient from "@/src/api/axios";
+import { Picker } from "@react-native-picker/picker";
 import React, { useState } from "react";
-import { Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+interface NotificationForm {
+  title: string;
+  content: string;
+  target: string;
+}
 
 const SendNotificationToEmail: React.FC = () => {
-  const [formData, setFormData] = useState({
+  const [loading, setLoading] = useState(false);
+
+  const [formData, setFormData] = useState<NotificationForm>({
     title: "",
     content: "",
     target: "all",
   });
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
 
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >,
-  ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (field: keyof NotificationForm, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!formData.title || !formData.content) {
-      setMessage("Vui lòng nhập tiêu đề và nội dung");
+      Alert.alert("Thông báo", "Vui lòng nhập tiêu đề và nội dung.");
       return;
     }
 
     setLoading(true);
+
     try {
-      await axios.post("/notifications/email", formData);
-      setMessage("Gửi thông báo thành công!");
-      setFormData({ title: "", content: "", target: "all" });
-    } catch (err: any) {
-      setMessage("Gửi thông báo thất bại");
+      await apiClient.post("/notifications/email", formData);
+
+      Alert.alert("Thành công", "Gửi thông báo thành công!");
+
+      setFormData({
+        title: "",
+        content: "",
+        target: "all",
+      });
+    } catch (error: any) {
+      Alert.alert(
+        "Lỗi",
+        error?.response?.data?.message || "Gửi thông báo thất bại.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View className="max-w-3xl mx-auto p-6">
-      <Text className="text-3xl font-bold mb-8">Gửi Thông Báo Qua Email</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Gửi Thông Báo Qua Email</Text>
 
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-xl shadow space-y-6">
-        <View>
-          <Text className="block text-sm font-medium mb-2">Tiêu đề</Text>
-          <input
-            type="text"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            className="w-full border border-gray-300 rounded-lg p-3"
-            required
-          />
+        <TextInput
+          style={styles.input}
+          placeholder="Tiêu đề"
+          value={formData.title}
+          onChangeText={(text) => handleChange("title", text)}
+        />
+
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Nội dung thông báo"
+          value={formData.content}
+          onChangeText={(text) => handleChange("content", text)}
+          multiline
+          numberOfLines={6}
+          textAlignVertical="top"
+        />
+
+        <Text style={styles.label}>Đối tượng nhận</Text>
+
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={formData.target}
+            onValueChange={(value) => handleChange("target", value)}>
+            <Picker.Item label="Tất cả" value="all" />
+            <Picker.Item label="Sinh viên" value="student" />
+            <Picker.Item label="Giảng viên" value="teacher" />
+            <Picker.Item label="Quản trị viên" value="admin" />
+          </Picker>
         </View>
 
-        <View>
-          <Text className="block text-sm font-medium mb-2">Nội dung</Text>
-          <textarea
-            name="content"
-            value={formData.content}
-            onChange={handleChange}
-            rows={6}
-            className="w-full border border-gray-300 rounded-lg p-3"
-            required
-          />
-        </View>
-
-        <View>
-          <Text className="block text-sm font-medium mb-2">Đối tượng nhận</Text>
-          <select
-            name="target"
-            value={formData.target}
-            onChange={handleChange}
-            className="w-full border border-gray-300 rounded-lg p-3">
-            <option value="all">Tất cả</option>
-            <option value="student">Sinh viên</option>
-            <option value="teacher">Giảng viên</option>
-            <option value="admin">Quản trị viên</option>
-          </select>
-        </View>
-
-        <button
-          type="submit"
+        <TouchableOpacity
+          style={[styles.button, loading && { opacity: 0.7 }]}
           disabled={loading}
-          className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-semibold">
-          {loading ? "Đang gửi..." : "Gửi Thông Báo"}
-        </button>
-
-        {message && (
-          <Text
-            className={`text-center font-medium ${message.includes("thành công") ? "text-green-600" : "text-red-600"}`}>
-            {message}
-          </Text>
-        )}
-      </form>
-    </View>
+          onPress={handleSubmit}>
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Gửi Thông Báo</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 export default SendNotificationToEmail;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    padding: 20,
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    marginBottom: 25,
+    color: "#111827",
+  },
+
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+    color: "#374151",
+  },
+
+  input: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginBottom: 15,
+    fontSize: 16,
+  },
+
+  textArea: {
+    height: 150,
+  },
+
+  pickerContainer: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    marginBottom: 20,
+    overflow: "hidden",
+  },
+
+  button: {
+    backgroundColor: "#16A34A",
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+});
