@@ -144,10 +144,11 @@ const ViewTranscript: React.FC = () => {
 
   const getGradeColor = (grade: string | number) => {
     const g = typeof grade === "number" ? grade : parseFloat(grade as string);
-    if (g >= 8.5) return "#28a745";
-    if (g >= 7.0) return "#17a2b8";
-    if (g >= 5.0) return "#ffc107";
-    return "#dc3545";
+    if (isNaN(g)) return "#6B7280";
+    if (g >= 8.5) return "#059669";
+    if (g >= 7.0) return "#0EA5E9";
+    if (g >= 5.0) return "#D97706";
+    return "#DC2626";
   };
 
   return (
@@ -158,20 +159,27 @@ const ViewTranscript: React.FC = () => {
           onPress={handleExport}
           disabled={exporting}
           style={styles.exportButton}>
-          <Ionicons name="download-outline" size={24} color="#0066CC" />
+          <Ionicons
+            name={exporting ? "hourglass-outline" : "download-outline"}
+            size={22}
+            color="#5B5BD6"
+          />
         </TouchableOpacity>
       </View>
 
+      {/* Summary Card */}
       <View style={styles.summaryCard}>
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{summary.gpa}</Text>
             <Text style={styles.summaryLabel}>GPA</Text>
           </View>
+          <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{summary.totalCredits}</Text>
             <Text style={styles.summaryLabel}>Tín chỉ</Text>
           </View>
+          <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{summary.totalCourses}</Text>
             <Text style={styles.summaryLabel}>Môn học</Text>
@@ -181,12 +189,18 @@ const ViewTranscript: React.FC = () => {
 
       <ScrollView
         style={styles.listContainer}
+        contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#5B5BD6"]}
+            tintColor="#5B5BD6"
+          />
         }>
         {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0066CC" />
+            <ActivityIndicator size="large" color="#5B5BD6" />
           </View>
         ) : transcript.length > 0 ? (
           transcript.map((item) => (
@@ -196,7 +210,9 @@ const ViewTranscript: React.FC = () => {
                 <Text style={styles.courseName} numberOfLines={2}>
                   {item.courseName}
                 </Text>
-                <Text style={styles.semester}>{item.semester}</Text>
+                {item.semester ? (
+                  <Text style={styles.semester}>{item.semester}</Text>
+                ) : null}
               </View>
 
               <View style={styles.gradeSection}>
@@ -210,15 +226,15 @@ const ViewTranscript: React.FC = () => {
               <View style={styles.statusContainer}>
                 <Ionicons
                   name="checkmark-circle"
-                  size={20}
-                  color={item.status === "Completed" ? "#28a745" : "#6c757d"}
+                  size={22}
+                  color={item.status === "Completed" ? "#059669" : "#9CA3AF"}
                 />
               </View>
             </View>
           ))
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons name="school-outline" size={80} color="#e0e0e0" />
+            <Ionicons name="school-outline" size={72} color="#D1D5DB" />
             <Text style={styles.emptyText}>Chưa có dữ liệu bảng điểm</Text>
           </View>
         )}
@@ -228,39 +244,77 @@ const ViewTranscript: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa" },
+  container: {
+    flex: 1,
+    backgroundColor: "#F3EEFF",
+  },
 
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: "#F0F0F0",
   },
-  headerTitle: { fontSize: 22, fontWeight: "700", color: "#1f1f1f" },
-  exportButton: { padding: 6 },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  exportButton: {
+    padding: 6,
+  },
 
   summaryCard: {
-    backgroundColor: "#fff",
-    margin: 16,
-    padding: 20,
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
     borderRadius: 16,
     shadowColor: "#000",
-    boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.08)",
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-around",
+    alignItems: "center",
   },
-  summaryItem: { alignItems: "center" },
-  summaryValue: { fontSize: 28, fontWeight: "700", color: "#0066CC" },
-  summaryLabel: { fontSize: 13, color: "#666", marginTop: 4 },
+  summaryItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: "#E5E7EB",
+  },
+  summaryValue: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#5B5BD6",
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 4,
+  },
 
-  listContainer: { flex: 1, paddingHorizontal: 16 },
+  listContainer: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 32,
+  },
 
   loadingContainer: {
     flex: 1,
@@ -270,34 +324,68 @@ const styles = StyleSheet.create({
   },
 
   transcriptCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     padding: 16,
     marginBottom: 12,
     flexDirection: "row",
     alignItems: "center",
-    boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.07)",
-    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
 
-  courseInfo: { flex: 1 },
-  courseCode: { fontSize: 16, fontWeight: "700", color: "#333" },
-  courseName: { fontSize: 15.5, marginVertical: 6, lineHeight: 22 },
-  semester: { fontSize: 13, color: "#888" },
+  courseInfo: {
+    flex: 1,
+  },
+  courseCode: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  courseName: {
+    fontSize: 14.5,
+    marginVertical: 5,
+    lineHeight: 20,
+    color: "#374151",
+  },
+  semester: {
+    fontSize: 12.5,
+    color: "#9CA3AF",
+  },
 
-  gradeSection: { alignItems: "center", marginRight: 12 },
-  grade: { fontSize: 22, fontWeight: "700" },
-  creditText: { fontSize: 13, color: "#666", marginTop: 4 },
+  gradeSection: {
+    alignItems: "center",
+    marginRight: 10,
+    minWidth: 48,
+  },
+  grade: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  creditText: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 3,
+  },
 
-  statusContainer: { marginLeft: 8 },
+  statusContainer: {
+    marginLeft: 4,
+  },
 
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 120,
+    paddingVertical: 100,
   },
-  emptyText: { fontSize: 17, color: "#888", marginTop: 16 },
+  emptyText: {
+    fontSize: 16,
+    color: "#9CA3AF",
+    marginTop: 16,
+  },
 });
 
 export default ViewTranscript;
