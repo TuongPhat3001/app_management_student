@@ -24,12 +24,14 @@ interface CreateClassForm {
   semester: string;
   academicYear: string;
   capacity: string;
+  teacherId: string;
 }
 
 const CreateClass: React.FC = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [createdClassId, setCreatedClassId] = useState<number | null>(null);
   const [formData, setFormData] = useState<CreateClassForm>({
     classCode: "",
     className: "",
@@ -37,6 +39,7 @@ const CreateClass: React.FC = () => {
     semester: "",
     academicYear: "",
     capacity: "",
+    teacherId: "",
   });
 
   const handleChange = (field: keyof CreateClassForm, value: string) => {
@@ -53,7 +56,7 @@ const CreateClass: React.FC = () => {
       return false;
     }
     if (!formData.courseId.trim() || isNaN(Number(formData.courseId))) {
-      Alert.alert("Thông báo", "ID môn học phải là số.");
+      Alert.alert("Thông báo", "ID môn học phải là số và bắt buộc.");
       return false;
     }
     if (!formData.semester.trim()) {
@@ -72,6 +75,10 @@ const CreateClass: React.FC = () => {
       Alert.alert("Thông báo", "Sức chứa phải lớn hơn 0.");
       return false;
     }
+    if (formData.teacherId.trim() && isNaN(Number(formData.teacherId))) {
+      Alert.alert("Thông báo", "ID giảng viên phải là số.");
+      return false;
+    }
     return true;
   };
 
@@ -80,20 +87,28 @@ const CreateClass: React.FC = () => {
 
     setLoading(true);
     setSuccess(false);
+    setCreatedClassId(null);
+
+    const payload: Record<string, any> = {
+      classCode: formData.classCode.trim(),
+      className: formData.className.trim(),
+      courseId: Number(formData.courseId),
+      semester: formData.semester.trim(),
+      academicYear: formData.academicYear.trim(),
+      capacity: Number(formData.capacity),
+    };
+
+    if (formData.teacherId.trim()) {
+      payload.teacherId = Number(formData.teacherId);
+    }
 
     try {
-      const payload = {
-        classCode: formData.classCode.trim(),
-        className: formData.className.trim(),
-        courseId: Number(formData.courseId),
-        semester: formData.semester.trim(),
-        academicYear: formData.academicYear.trim(),
-        capacity: Number(formData.capacity),
-      };
-
-      await apiClient.post("/classes", payload);
+      const res = await apiClient.post("/classes", payload);
+      const data = res.data?.data || res.data;
 
       setSuccess(true);
+      setCreatedClassId(data?.ID || data?.id || data?.Id || null);
+
       Alert.alert(
         "Thành công",
         "Tạo lớp học thành công và đã lưu vào hệ thống!",
@@ -106,18 +121,20 @@ const CreateClass: React.FC = () => {
         semester: "",
         academicYear: "",
         capacity: "",
+        teacherId: "",
       });
     } catch (error: any) {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        (error?.response?.status === 401
-          ? "Bạn chưa đăng nhập hoặc hết phiên."
-          : error?.response?.status === 400
-            ? "Dữ liệu không hợp lệ (mã lớp có thể đã tồn tại)."
-            : error?.response?.status === 404
-              ? "Không tìm thấy môn học với ID đã nhập."
-              : "Không thể tạo lớp học. Vui lòng thử lại.");
+      const data = error?.response?.data;
+      let message = data?.message || data?.error || "Không thể tạo lớp học.";
+
+      if (data?.error && typeof data.error === "string") {
+        message = `${data.message || "Lỗi"}\n${data.error}`;
+      } else if (error?.response?.status === 401) {
+        message = "Bạn chưa đăng nhập hoặc hết phiên.";
+      } else if (error?.response?.status === 404) {
+        message = "Không tìm thấy môn học (courseId) hoặc giảng viên.";
+      }
+
       Alert.alert("Lỗi", message);
     } finally {
       setLoading(false);
@@ -141,6 +158,8 @@ const CreateClass: React.FC = () => {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled">
+          <Text style={styles.sectionLabel}>Thông tin lớp học</Text>
+
           <Text style={styles.label}>Mã lớp *</Text>
           <TextInput
             style={styles.input}
@@ -160,7 +179,7 @@ const CreateClass: React.FC = () => {
             onChangeText={(t) => handleChange("className", t)}
           />
 
-          <Text style={styles.label}>ID môn học *</Text>
+          <Text style={styles.label}>ID môn học (courseId) *</Text>
           <TextInput
             style={styles.input}
             placeholder="ID môn học trong hệ thống (số)"
@@ -170,7 +189,7 @@ const CreateClass: React.FC = () => {
             onChangeText={(t) => handleChange("courseId", t)}
           />
           <Text style={styles.hint}>
-            Lấy ID từ màn Quản lý môn học (Courses)
+            Môn học phải đã tồn tại (màn Quản lý môn học).
           </Text>
 
           <Text style={styles.label}>Học kỳ *</Text>
@@ -201,6 +220,21 @@ const CreateClass: React.FC = () => {
             onChangeText={(t) => handleChange("capacity", t)}
           />
 
+          <Text style={styles.sectionLabel}>Phân công (tùy chọn)</Text>
+
+          <Text style={styles.label}>ID giảng viên (teacherId)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Để trống nếu phân công sau"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            value={formData.teacherId}
+            onChangeText={(t) => handleChange("teacherId", t)}
+          />
+          <Text style={styles.hint}>
+            Hoặc phân công sau tại màn “Phân công giảng viên”.
+          </Text>
+
           <TouchableOpacity
             style={[styles.button, loading && { opacity: 0.7 }]}
             onPress={handleSubmit}
@@ -219,13 +253,22 @@ const CreateClass: React.FC = () => {
                 <Ionicons name="checkmark-circle" size={22} color="#059669" />
                 <Text style={styles.resultTitle}>Lớp học đã được lưu</Text>
               </View>
-              <Text style={styles.resultHint}>
-                Bạn có thể phân công giảng viên tại mục “Phân công giảng viên”.
-              </Text>
+              {createdClassId ? (
+                <Text style={styles.resultText}>
+                  ID lớp:{" "}
+                  <Text style={styles.resultBold}>{createdClassId}</Text>
+                  {"\n"}
+                  (Dùng ID này khi tạo sinh viên — field classId)
+                </Text>
+              ) : (
+                <Text style={styles.resultHint}>
+                  Lấy ID lớp từ danh sách lớp để gán khi tạo sinh viên.
+                </Text>
+              )}
               <TouchableOpacity
                 style={styles.linkBtn}
                 onPress={() => router.push("/(admin)/AssignTeacher" as any)}>
-                <Text style={styles.linkText}>Đi phân công ngay →</Text>
+                <Text style={styles.linkText}>Đi phân công giảng viên →</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -258,6 +301,15 @@ const styles = StyleSheet.create({
   },
   headerSpacer: { width: 40 },
   scroll: { padding: 20, paddingBottom: 40 },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#5B5BD6",
+    marginBottom: 12,
+    marginTop: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   label: {
     fontSize: 14,
     fontWeight: "600",
@@ -304,6 +356,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   resultTitle: { fontSize: 16, fontWeight: "700", color: "#065F46" },
+  resultText: { fontSize: 13, color: "#374151", lineHeight: 20 },
+  resultBold: { fontWeight: "700", color: "#111827" },
   resultHint: { fontSize: 13, color: "#374151", lineHeight: 20 },
   linkBtn: { marginTop: 10 },
   linkText: { fontSize: 14, fontWeight: "600", color: "#5B5BD6" },

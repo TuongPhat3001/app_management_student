@@ -17,27 +17,43 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+/**
+ * Pattern giống CreateStudent (Go/Gin):
+ * required: username, fullName, teacherCode
+ * optional: password, email, department, specialization, phone, joinYear
+ */
 interface TeacherForm {
+  username: string;
+  password: string;
+  email: string;
   fullName: string;
+  teacherCode: string;
   department: string;
   specialization: string;
+  phone: string;
   joinYear: string;
 }
 
 interface CreatedTeacher {
-  teacherId?: string;
+  teacherCode?: string;
+  username?: string;
+  fullName?: string;
   email?: string;
   defaultPassword?: string;
-  id?: number;
 }
 
 const CreateIdTeacher: React.FC = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<TeacherForm>({
+    username: "",
+    password: "",
+    email: "",
     fullName: "",
+    teacherCode: "",
     department: "",
     specialization: "",
+    phone: "",
     joinYear: "",
   });
   const [createdInfo, setCreatedInfo] = useState<CreatedTeacher | null>(null);
@@ -47,26 +63,28 @@ const CreateIdTeacher: React.FC = () => {
   };
 
   const validate = () => {
+    if (!formData.username.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập tên đăng nhập (username).");
+      return false;
+    }
     if (!formData.fullName.trim()) {
       Alert.alert("Thông báo", "Vui lòng nhập họ và tên.");
       return false;
     }
-    if (!formData.department.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập khoa / bộ môn.");
+    if (!formData.teacherCode.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập mã giảng viên.");
       return false;
     }
-    if (!formData.specialization.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập chuyên ngành.");
+    if (formData.password.trim() && formData.password.trim().length < 6) {
+      Alert.alert("Thông báo", "Mật khẩu phải có ít nhất 6 ký tự.");
       return false;
     }
-    if (!formData.joinYear.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập năm công tác.");
-      return false;
-    }
-    const year = Number(formData.joinYear);
-    if (isNaN(year) || year < 1990 || year > new Date().getFullYear() + 1) {
-      Alert.alert("Thông báo", "Năm công tác không hợp lệ.");
-      return false;
+    if (formData.joinYear.trim()) {
+      const year = Number(formData.joinYear);
+      if (isNaN(year) || year < 1990 || year > new Date().getFullYear() + 1) {
+        Alert.alert("Thông báo", "Năm công tác không hợp lệ.");
+        return false;
+      }
     }
     return true;
   };
@@ -77,45 +95,62 @@ const CreateIdTeacher: React.FC = () => {
     setLoading(true);
     setCreatedInfo(null);
 
-    try {
-      const payload = {
-        fullName: formData.fullName.trim(),
-        department: formData.department.trim(),
-        specialization: formData.specialization.trim(),
-        joinYear: Number(formData.joinYear),
-      };
+    const payload: Record<string, any> = {
+      username: formData.username.trim(),
+      fullName: formData.fullName.trim(),
+      teacherCode: formData.teacherCode.trim(),
+    };
 
+    if (formData.password.trim()) payload.password = formData.password.trim();
+    if (formData.email.trim()) payload.email = formData.email.trim();
+    if (formData.department.trim())
+      payload.department = formData.department.trim();
+    if (formData.specialization.trim())
+      payload.specialization = formData.specialization.trim();
+    if (formData.phone.trim()) payload.phone = formData.phone.trim();
+    if (formData.joinYear.trim()) payload.joinYear = Number(formData.joinYear);
+
+    try {
       const res = await apiClient.post("/teachers", payload);
       const data = res.data?.data || res.data;
+      const defaultPassword =
+        res.data?.defaultPassword || formData.password.trim() || "Teacher@123";
 
       setCreatedInfo({
-        teacherId: data?.teacherId || data?.teacher_id || data?.code,
-        email: data?.email,
-        defaultPassword:
-          data?.defaultPassword || data?.default_password || data?.password,
-        id: data?.id,
+        teacherCode:
+          data?.TeacherCode ||
+          data?.teacherCode ||
+          data?.teacher_code ||
+          formData.teacherCode,
+        username: formData.username,
+        fullName: formData.fullName,
+        email:
+          data?.User?.Email ||
+          data?.User?.email ||
+          data?.email ||
+          formData.email,
+        defaultPassword,
       });
 
-      Alert.alert(
-        "Thành công",
-        "Tạo giảng viên thành công và đã lưu vào hệ thống!",
-      );
+      Alert.alert("Thành công", "Tạo giảng viên thành công!");
 
       setFormData({
+        username: "",
+        password: "",
+        email: "",
         fullName: "",
+        teacherCode: "",
         department: "",
         specialization: "",
+        phone: "",
         joinYear: "",
       });
     } catch (error: any) {
-      const message =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        (error?.response?.status === 401
-          ? "Bạn chưa đăng nhập hoặc hết phiên."
-          : error?.response?.status === 400
-            ? "Dữ liệu không hợp lệ. Kiểm tra lại thông tin."
-            : "Tạo giảng viên thất bại. Vui lòng thử lại.");
+      const data = error?.response?.data;
+      let message = data?.message || data?.error || "Tạo giảng viên thất bại.";
+      if (data?.error && typeof data.error === "string") {
+        message = `${data.message || "Lỗi"}\n${data.error}`;
+      }
       Alert.alert("Lỗi", message);
     } finally {
       setLoading(false);
@@ -139,6 +174,19 @@ const CreateIdTeacher: React.FC = () => {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled">
+          <Text style={styles.sectionLabel}>Thông tin bắt buộc</Text>
+
+          <Text style={styles.label}>Tên đăng nhập (username) *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: phat.truong"
+            placeholderTextColor="#9CA3AF"
+            value={formData.username}
+            onChangeText={(t) => handleChange("username", t)}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
           <Text style={styles.label}>Họ và tên *</Text>
           <TextInput
             style={styles.input}
@@ -148,7 +196,40 @@ const CreateIdTeacher: React.FC = () => {
             onChangeText={(t) => handleChange("fullName", t)}
           />
 
-          <Text style={styles.label}>Khoa / Bộ môn *</Text>
+          <Text style={styles.label}>Mã giảng viên *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: GV001"
+            placeholderTextColor="#9CA3AF"
+            value={formData.teacherCode}
+            onChangeText={(t) => handleChange("teacherCode", t)}
+            autoCapitalize="characters"
+          />
+
+          <Text style={styles.sectionLabel}>Thông tin tùy chọn</Text>
+
+          <Text style={styles.label}>Mật khẩu</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Để trống → mặc định Teacher@123"
+            placeholderTextColor="#9CA3AF"
+            value={formData.password}
+            onChangeText={(t) => handleChange("password", t)}
+            secureTextEntry
+          />
+
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: phat.truong@teacher.edu.vn"
+            placeholderTextColor="#9CA3AF"
+            value={formData.email}
+            onChangeText={(t) => handleChange("email", t)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.label}>Khoa / Bộ môn</Text>
           <TextInput
             style={styles.input}
             placeholder="VD: Công nghệ thông tin"
@@ -157,7 +238,7 @@ const CreateIdTeacher: React.FC = () => {
             onChangeText={(t) => handleChange("department", t)}
           />
 
-          <Text style={styles.label}>Chuyên ngành *</Text>
+          <Text style={styles.label}>Chuyên ngành</Text>
           <TextInput
             style={styles.input}
             placeholder="VD: Hệ thống thông tin"
@@ -166,7 +247,17 @@ const CreateIdTeacher: React.FC = () => {
             onChangeText={(t) => handleChange("specialization", t)}
           />
 
-          <Text style={styles.label}>Năm công tác *</Text>
+          <Text style={styles.label}>Số điện thoại</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: 0901234567"
+            placeholderTextColor="#9CA3AF"
+            value={formData.phone}
+            onChangeText={(t) => handleChange("phone", t)}
+            keyboardType="phone-pad"
+          />
+
+          <Text style={styles.label}>Năm công tác</Text>
           <TextInput
             style={styles.input}
             placeholder="VD: 2020"
@@ -194,10 +285,24 @@ const CreateIdTeacher: React.FC = () => {
                 <Ionicons name="checkmark-circle" size={22} color="#059669" />
                 <Text style={styles.resultTitle}>Tài khoản đã tạo</Text>
               </View>
-              {createdInfo.teacherId ? (
+              {createdInfo.fullName ? (
+                <Text style={styles.resultText}>
+                  Họ tên:{" "}
+                  <Text style={styles.resultBold}>{createdInfo.fullName}</Text>
+                </Text>
+              ) : null}
+              {createdInfo.teacherCode ? (
                 <Text style={styles.resultText}>
                   Mã GV:{" "}
-                  <Text style={styles.resultBold}>{createdInfo.teacherId}</Text>
+                  <Text style={styles.resultBold}>
+                    {createdInfo.teacherCode}
+                  </Text>
+                </Text>
+              ) : null}
+              {createdInfo.username ? (
+                <Text style={styles.resultText}>
+                  Username:{" "}
+                  <Text style={styles.resultBold}>{createdInfo.username}</Text>
                 </Text>
               ) : null}
               {createdInfo.email ? (
@@ -208,14 +313,14 @@ const CreateIdTeacher: React.FC = () => {
               ) : null}
               {createdInfo.defaultPassword ? (
                 <Text style={styles.resultText}>
-                  Mật khẩu mặc định:{" "}
+                  Mật khẩu:{" "}
                   <Text style={styles.resultBold}>
                     {createdInfo.defaultPassword}
                   </Text>
                 </Text>
               ) : null}
               <Text style={styles.resultHint}>
-                Hãy gửi thông tin này cho giảng viên để đăng nhập.
+                Gửi thông tin đăng nhập cho giảng viên.
               </Text>
             </View>
           )}
@@ -248,6 +353,15 @@ const styles = StyleSheet.create({
   },
   headerSpacer: { width: 40 },
   scroll: { padding: 20, paddingBottom: 40 },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#5B5BD6",
+    marginBottom: 12,
+    marginTop: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   label: {
     fontSize: 14,
     fontWeight: "600",
