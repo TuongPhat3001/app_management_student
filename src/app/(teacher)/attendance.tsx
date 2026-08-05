@@ -1,350 +1,368 @@
-import React from "react";
+import axios from "axios";
+import React, { useEffect, useState } from "react";
 import {
-  Dimensions,
-  SafeAreaView,
-  StatusBar,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
-const { width } = Dimensions.get("window");
-const CARD_WIDTH = width - 48;
-const QR_SIZE = 180;
+type ClassItem = {
+  id?: number;
+  classId?: number;
+  classCode?: string;
+  courseName?: string;
+};
+
+type SessionItem = {
+  id: number;
+  code?: string;
+  classDate?: string;
+  expiresAt?: string;
+  isActive?: boolean;
+  note?: string;
+};
+
+type RecordItem = {
+  id: number;
+  status?: string;
+  note?: string;
+  classDate?: string;
+  checkedInAt?: string;
+  studentCode?: string;
+  studentName?: string;
+  enrollment?: {
+    student?: {
+      studentCode?: string;
+      user?: { fullName?: string };
+    };
+  };
+};
+
+const STATUS_OPTIONS = ["present", "absent", "late", "excused"];
 
 const Attendance = () => {
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [records, setRecords] = useState<RecordItem[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
+    null,
+  );
+  const [showRecords, setShowRecords] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    loadClasses();
+  }, []);
+
+  const loadClasses = async () => {
+    try {
+      const res = await axios.get("/teacher/attendance/classes");
+      setClasses(res.data?.data || res.data || []);
+    } catch {
+      setClasses([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadClasses();
+  };
+
+  const getClassId = (item: ClassItem) => item.classId || item.id || 0;
+
+  const createSession = async (classId: number) => {
+    setCreating(true);
+    try {
+      const res = await axios.post("/attendance/sessions", { classId });
+      const session = res.data?.data || res.data;
+      Alert.alert(
+        "Tạo phiên điểm danh thành công",
+        `Mã: ${session.code || "—"}\nHiệu lực đến: ${formatTime(session.expiresAt)}`,
+      );
+      // Mở luôn danh sách điểm danh của phiên mới
+      if (session.id) {
+        openRecords(session.id);
+      }
+    } catch (err: any) {
+      Alert.alert(
+        "Lỗi",
+        err.response?.data?.message || "Không tạo được phiên điểm danh",
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const openRecords = async (sessionId: number) => {
+    setSelectedSessionId(sessionId);
+    setShowRecords(true);
+    try {
+      const res = await axios.get(`/attendance/sessions/${sessionId}/records`);
+      setRecords(res.data?.data || res.data || []);
+    } catch {
+      setRecords([]);
+      Alert.alert("Lỗi", "Không tải được danh sách điểm danh");
+    }
+  };
+
+  const updateStatus = async (attendanceId: number, status: string) => {
+    try {
+      await axios.put(`/attendances/${attendanceId}`, { status });
+      setRecords((prev) =>
+        prev.map((r) => (r.id === attendanceId ? { ...r, status } : r)),
+      );
+    } catch (err: any) {
+      Alert.alert(
+        "Lỗi",
+        err.response?.data?.message || "Không cập nhật được trạng thái",
+      );
+    }
+  };
+
+  const statusLabel = (s?: string) => {
+    switch (s) {
+      case "present":
+        return "Có mặt";
+      case "absent":
+        return "Vắng";
+      case "late":
+        return "Đi trễ";
+      case "excused":
+        return "Có phép";
+      default:
+        return s || "—";
+    }
+  };
+
+  const statusColor = (s?: string) => {
+    switch (s) {
+      case "present":
+        return "#059669";
+      case "absent":
+        return "#dc2626";
+      case "late":
+        return "#d97706";
+      case "excused":
+        return "#2563eb";
+      default:
+        return "#64748b";
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#EDE7F6" />
-      <View style={styles.container}>
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.backButton} activeOpacity={0.7}>
-              <Text style={styles.backArrow}>←</Text>
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Mã QR điểm danh</Text>
-            <View style={styles.headerSpacer} />
-          </View>
+    <View style={styles.container}>
+      <Text style={styles.title}>Điểm danh lớp học</Text>
+      <Text style={styles.note}>
+        Chọn lớp → tạo phiên QR hoặc xem / sửa trạng thái điểm danh.
+      </Text>
 
-          <View style={styles.content}>
-            <Text style={styles.title}>Quét mã QR</Text>
-            <Text style={styles.subtitle}>
-              Hướng camera của bạn để quét{"\n"}mã QR điểm danh
-            </Text>
+      <FlatList
+        data={classes}
+        keyExtractor={(item, idx) => String(getClassId(item) || idx)}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        ListEmptyComponent={
+          <Text style={styles.empty}>Không có lớp phụ trách</Text>
+        }
+        renderItem={({ item }) => {
+          const classId = getClassId(item);
+          const active = selectedClassId === classId;
+          return (
+            <View style={[styles.card, active && styles.cardActive]}>
+              <TouchableOpacity onPress={() => setSelectedClassId(classId)}>
+                <Text style={styles.classCode}>
+                  {item.classCode || `Lớp #${classId}`}
+                </Text>
+                {!!item.courseName && (
+                  <Text style={styles.meta}>{item.courseName}</Text>
+                )}
+              </TouchableOpacity>
 
-            <View style={styles.qrWrapper}>
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
-
-              <View style={styles.qrCode}>
-                <View style={styles.qrInner}>
-                  <View style={[styles.finder, { top: 8, left: 8 }]}>
-                    <View style={styles.finderInner} />
-                  </View>
-                  <View style={[styles.finder, { top: 8, right: 8 }]}>
-                    <View style={styles.finderInner} />
-                  </View>
-                  <View style={[styles.finder, { bottom: 8, left: 8 }]}>
-                    <View style={styles.finderInner} />
-                  </View>
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 12, left: 70, width: 10, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 12, left: 90, width: 20, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 28, left: 70, width: 10, height: 20 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 28, left: 100, width: 10, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 50, left: 70, width: 30, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 70, left: 80, width: 10, height: 30 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 70, left: 100, width: 20, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 90, left: 70, width: 10, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 110, left: 80, width: 30, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 50, left: 110, width: 10, height: 20 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 130, left: 70, width: 20, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 140, left: 100, width: 10, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 12, left: 120, width: 10, height: 20 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 40, left: 130, width: 10, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 60, left: 120, width: 20, height: 10 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 90, left: 120, width: 10, height: 30 },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.module,
-                      { top: 130, left: 120, width: 20, height: 10 },
-                    ]}
-                  />
-                </View>
+              <View style={styles.row}>
+                <TouchableOpacity
+                  style={[styles.btn, styles.btnPrimary]}
+                  disabled={creating}
+                  onPress={() => createSession(classId)}>
+                  <Text style={styles.btnPrimaryText}>
+                    {creating ? "Đang tạo..." : "Tạo QR điểm danh"}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
+          );
+        }}
+      />
 
-            <View style={styles.sessionInfo}>
-              <Text style={styles.sessionText}>
-                Phiên: <Text style={styles.sessionBold}>Database Systems</Text>
-              </Text>
-              <Text style={styles.timerText}>
-                Thời gian còn lại: <Text style={styles.timerValue}>16:36</Text>
-              </Text>
-            </View>
+      {/* Modal danh sách điểm danh */}
+      <Modal visible={showRecords} animationType="slide">
+        <View style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Danh sách điểm danh</Text>
+            <TouchableOpacity onPress={() => setShowRecords(false)}>
+              <Text style={styles.close}>Đóng</Text>
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.manualButton} activeOpacity={0.7}>
-            <Text style={styles.manualText}>Nhập mã thủ công</Text>
-          </TouchableOpacity>
+          <FlatList
+            data={records}
+            keyExtractor={(item) => String(item.id)}
+            ListEmptyComponent={
+              <Text style={styles.empty}>Chưa có bản ghi điểm danh</Text>
+            }
+            renderItem={({ item }) => {
+              const name =
+                item.studentName ||
+                item.enrollment?.student?.user?.fullName ||
+                "Sinh viên";
+              const code =
+                item.studentCode || item.enrollment?.student?.studentCode || "";
+
+              return (
+                <View style={styles.recordCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.studentName}>{name}</Text>
+                    {!!code && <Text style={styles.meta}>{code}</Text>}
+                    <Text
+                      style={[
+                        styles.status,
+                        { color: statusColor(item.status) },
+                      ]}>
+                      {statusLabel(item.status)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.statusActions}>
+                    {STATUS_OPTIONS.map((s) => (
+                      <TouchableOpacity
+                        key={s}
+                        style={[
+                          styles.statusChip,
+                          item.status === s && {
+                            backgroundColor: statusColor(s),
+                          },
+                        ]}
+                        onPress={() => updateStatus(item.id, s)}>
+                        <Text
+                          style={[
+                            styles.statusChipText,
+                            item.status === s && { color: "#fff" },
+                          ]}>
+                          {statusLabel(s)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              );
+            }}
+          />
         </View>
-      </View>
-    </SafeAreaView>
+      </Modal>
+    </View>
   );
 };
 
 export default Attendance;
 
+function formatTime(value?: string) {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleTimeString("vi-VN");
+  } catch {
+    return value;
+  }
+}
+
 const styles = StyleSheet.create({
-  safeArea: {
+  container: { flex: 1, backgroundColor: "#f8fafc", padding: 16 },
+  center: {
     flex: 1,
-    backgroundColor: "#EDE7F6",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#EDE7F6",
-    alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 24,
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
   },
+  title: { fontSize: 22, fontWeight: "800", color: "#0f172a", marginBottom: 6 },
+  note: { fontSize: 13, color: "#64748b", marginBottom: 14 },
   card: {
-    width: CARD_WIDTH,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    paddingTop: 16,
-    paddingBottom: 32,
-    paddingHorizontal: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 6,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
-  header: {
-    flexDirection: "row",
+  cardActive: { borderColor: "#2563eb", backgroundColor: "#eff6ff" },
+  classCode: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
+  meta: { fontSize: 13, color: "#64748b", marginTop: 2 },
+  row: { flexDirection: "row", marginTop: 12, gap: 8 },
+  btn: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     alignItems: "center",
-    marginBottom: 28,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "flex-start",
-  },
-  backArrow: {
-    fontSize: 24,
-    color: "#1A1A1A",
-    fontWeight: "400",
-  },
-  headerTitle: {
+  btnPrimary: { backgroundColor: "#2563eb", flex: 1 },
+  btnPrimaryText: { color: "#fff", fontWeight: "700" },
+  empty: { textAlign: "center", color: "#94a3b8", marginTop: 40 },
+  modal: {
     flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#1A1A1A",
+    backgroundColor: "#f8fafc",
+    paddingTop: 54,
+    paddingHorizontal: 16,
   },
-  headerSpacer: {
-    width: 36,
-  },
-  content: {
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 14,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 8,
+  modalTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
+  close: { color: "#2563eb", fontWeight: "700", fontSize: 15 },
+  recordCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#8A8A8A",
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 32,
+  studentName: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
+  status: { marginTop: 4, fontWeight: "700", fontSize: 13 },
+  statusActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 10,
   },
-  qrWrapper: {
-    width: QR_SIZE + 24,
-    height: QR_SIZE + 24,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 32,
+  statusChip: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "#f8fafc",
   },
-  corner: {
-    position: "absolute",
-    width: 28,
-    height: 28,
-    borderColor: "#5B5BD6",
-  },
-  topLeft: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderTopLeftRadius: 6,
-  },
-  topRight: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-    borderTopRightRadius: 6,
-  },
-  bottomLeft: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-    borderBottomLeftRadius: 6,
-  },
-  bottomRight: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-    borderBottomRightRadius: 6,
-  },
-  qrCode: {
-    width: QR_SIZE,
-    height: QR_SIZE,
-    backgroundColor: "#FFFFFF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  qrInner: {
-    width: QR_SIZE - 16,
-    height: QR_SIZE - 16,
-    backgroundColor: "#FFFFFF",
-    position: "relative",
-  },
-  finder: {
-    position: "absolute",
-    width: 48,
-    height: 48,
-    borderWidth: 6,
-    borderColor: "#000000",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  finderInner: {
-    width: 22,
-    height: 22,
-    backgroundColor: "#000000",
-  },
-  module: {
-    position: "absolute",
-    backgroundColor: "#000000",
-  },
-  sessionInfo: {
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  sessionText: {
-    fontSize: 15,
-    color: "#4A4A4A",
-    marginBottom: 6,
-  },
-  sessionBold: {
-    fontWeight: "600",
-    color: "#1A1A1A",
-  },
-  timerText: {
-    fontSize: 15,
-    color: "#4A4A4A",
-  },
-  timerValue: {
-    fontWeight: "600",
-    color: "#1A1A1A",
-  },
-  manualButton: {
-    marginTop: 28,
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  manualText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#5B5BD6",
-  },
+  statusChipText: { fontSize: 12, color: "#334155", fontWeight: "600" },
 });
