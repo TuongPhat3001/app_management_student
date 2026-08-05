@@ -17,10 +17,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/**
- * Backend CreateClassRequest bắt buộc (theo lỗi Gin):
- *   MajorID, SemesterID, RoomID
- */
 interface CreateClassForm {
   classCode: string;
   className: string;
@@ -210,9 +206,9 @@ const CreateClass: React.FC = () => {
             onChangeText={(t) => handleChange("className", t)}
           />
 
-          <Text style={styles.sectionLabel}>ID bắt buộc (backend)</Text>
+          <Text style={styles.sectionLabel}>ID bắt buộc</Text>
 
-          <Text style={styles.label}>ID ngành (majorId) *</Text>
+          <Text style={styles.label}>ID ngành*</Text>
           <TextInput
             style={styles.input}
             placeholder="ID ngành trong DB (số)"
@@ -222,7 +218,7 @@ const CreateClass: React.FC = () => {
             onChangeText={(t) => handleChange("majorId", t)}
           />
 
-          <Text style={styles.label}>ID học kỳ (semesterId) *</Text>
+          <Text style={styles.label}>ID học kỳ*</Text>
           <TextInput
             style={styles.input}
             placeholder="ID học kỳ trong DB (số)"
@@ -232,7 +228,7 @@ const CreateClass: React.FC = () => {
             onChangeText={(t) => handleChange("semesterId", t)}
           />
 
-          <Text style={styles.label}>ID phòng học (roomId) *</Text>
+          <Text style={styles.label}>ID phòng học*</Text>
           <TextInput
             style={styles.input}
             placeholder="ID phòng trong DB (số)"
@@ -244,7 +240,7 @@ const CreateClass: React.FC = () => {
 
           <Text style={styles.sectionLabel}>Thông tin thêm</Text>
 
-          <Text style={styles.label}>ID môn học (courseId)</Text>
+          <Text style={styles.label}>ID môn học</Text>
           <TextInput
             style={styles.input}
             placeholder="ID môn học (số)"
@@ -273,7 +269,7 @@ const CreateClass: React.FC = () => {
             onChangeText={(t) => handleChange("capacity", t)}
           />
 
-          <Text style={styles.label}>ID giảng viên (teacherId)</Text>
+          <Text style={styles.label}>ID giảng viên</Text>
           <TextInput
             style={styles.input}
             placeholder="Để trống nếu phân công sau"
