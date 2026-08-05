@@ -1,4 +1,6 @@
 import apiClient from "@/src/api/axios";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -6,12 +8,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface TeacherForm {
   fullName: string;
@@ -21,55 +25,81 @@ interface TeacherForm {
 }
 
 interface CreatedTeacher {
-  teacherId: string;
-  email: string;
+  teacherId?: string;
+  email?: string;
   defaultPassword?: string;
+  id?: number;
 }
 
-const CreateTeacher: React.FC = () => {
+const CreateIdTeacher: React.FC = () => {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
-
   const [formData, setFormData] = useState<TeacherForm>({
     fullName: "",
     department: "",
     specialization: "",
     joinYear: "",
   });
-
   const [createdInfo, setCreatedInfo] = useState<CreatedTeacher | null>(null);
 
   const handleChange = (field: keyof TeacherForm, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const validate = () => {
+    if (!formData.fullName.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập họ và tên.");
+      return false;
+    }
+    if (!formData.department.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập khoa / bộ môn.");
+      return false;
+    }
+    if (!formData.specialization.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập chuyên ngành.");
+      return false;
+    }
+    if (!formData.joinYear.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập năm công tác.");
+      return false;
+    }
+    const year = Number(formData.joinYear);
+    if (isNaN(year) || year < 1990 || year > new Date().getFullYear() + 1) {
+      Alert.alert("Thông báo", "Năm công tác không hợp lệ.");
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async () => {
-    if (
-      !formData.fullName ||
-      !formData.department ||
-      !formData.specialization ||
-      !formData.joinYear
-    ) {
-      Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin.");
-      return;
-    }
+    if (!validate()) return;
 
     setLoading(true);
     setCreatedInfo(null);
 
     try {
-      const res = await apiClient.post("/teachers", {
-        fullName: formData.fullName,
-        department: formData.department,
-        specialization: formData.specialization,
+      const payload = {
+        fullName: formData.fullName.trim(),
+        department: formData.department.trim(),
+        specialization: formData.specialization.trim(),
         joinYear: Number(formData.joinYear),
+      };
+
+      const res = await apiClient.post("/teachers", payload);
+      const data = res.data?.data || res.data;
+
+      setCreatedInfo({
+        teacherId: data?.teacherId || data?.teacher_id || data?.code,
+        email: data?.email,
+        defaultPassword:
+          data?.defaultPassword || data?.default_password || data?.password,
+        id: data?.id,
       });
 
-      setCreatedInfo(res.data);
-
-      Alert.alert("Thành công", "Tạo giảng viên thành công!");
+      Alert.alert(
+        "Thành công",
+        "Tạo giảng viên thành công và đã lưu vào hệ thống!",
+      );
 
       setFormData({
         fullName: "",
@@ -78,144 +108,192 @@ const CreateTeacher: React.FC = () => {
         joinYear: "",
       });
     } catch (error: any) {
-      Alert.alert(
-        "Lỗi",
-        error?.response?.data?.message || "Tạo giảng viên thất bại.",
-      );
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        (error?.response?.status === 401
+          ? "Bạn chưa đăng nhập hoặc hết phiên."
+          : error?.response?.status === 400
+            ? "Dữ liệu không hợp lệ. Kiểm tra lại thông tin."
+            : "Tạo giảng viên thất bại. Vui lòng thử lại.");
+      Alert.alert("Lỗi", message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Tạo Tài Khoản Giảng Viên</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Họ và tên"
-          value={formData.fullName}
-          onChangeText={(text) => handleChange("fullName", text)}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Khoa / Bộ môn"
-          value={formData.department}
-          onChangeText={(text) => handleChange("department", text)}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Chuyên ngành"
-          value={formData.specialization}
-          onChangeText={(text) => handleChange("specialization", text)}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Năm công tác"
-          keyboardType="numeric"
-          value={formData.joinYear}
-          onChangeText={(text) => handleChange("joinYear", text)}
-        />
-
-        <TouchableOpacity
-          style={[styles.button, loading && { opacity: 0.7 }]}
-          disabled={loading}
-          onPress={handleSubmit}>
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>Tạo Giảng Viên</Text>
-          )}
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Tạo giảng viên mới</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-        {createdInfo && (
-          <View style={styles.resultBox}>
-            <Text style={styles.resultTitle}>Thông tin tài khoản đã tạo</Text>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled">
+          <Text style={styles.label}>Họ và tên *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: Trương Tường Phát"
+            placeholderTextColor="#9CA3AF"
+            value={formData.fullName}
+            onChangeText={(t) => handleChange("fullName", t)}
+          />
 
-            <Text style={styles.resultText}>
-              Mã giảng viên: {createdInfo.teacherId}
-            </Text>
+          <Text style={styles.label}>Khoa / Bộ môn *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: Công nghệ thông tin"
+            placeholderTextColor="#9CA3AF"
+            value={formData.department}
+            onChangeText={(t) => handleChange("department", t)}
+          />
 
-            <Text style={styles.resultText}>Email: {createdInfo.email}</Text>
+          <Text style={styles.label}>Chuyên ngành *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: Hệ thống thông tin"
+            placeholderTextColor="#9CA3AF"
+            value={formData.specialization}
+            onChangeText={(t) => handleChange("specialization", t)}
+          />
 
-            {createdInfo.defaultPassword && (
-              <Text style={styles.resultText}>
-                Mật khẩu mặc định: {createdInfo.defaultPassword}
-              </Text>
+          <Text style={styles.label}>Năm công tác *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: 2020"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            value={formData.joinYear}
+            onChangeText={(t) => handleChange("joinYear", t)}
+          />
+
+          <TouchableOpacity
+            style={[styles.button, loading && { opacity: 0.7 }]}
+            disabled={loading}
+            onPress={handleSubmit}
+            activeOpacity={0.8}>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.buttonText}>Tạo giảng viên</Text>
             )}
-          </View>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </TouchableOpacity>
+
+          {createdInfo && (
+            <View style={styles.resultBox}>
+              <View style={styles.resultHeader}>
+                <Ionicons name="checkmark-circle" size={22} color="#059669" />
+                <Text style={styles.resultTitle}>Tài khoản đã tạo</Text>
+              </View>
+              {createdInfo.teacherId ? (
+                <Text style={styles.resultText}>
+                  Mã GV:{" "}
+                  <Text style={styles.resultBold}>{createdInfo.teacherId}</Text>
+                </Text>
+              ) : null}
+              {createdInfo.email ? (
+                <Text style={styles.resultText}>
+                  Email:{" "}
+                  <Text style={styles.resultBold}>{createdInfo.email}</Text>
+                </Text>
+              ) : null}
+              {createdInfo.defaultPassword ? (
+                <Text style={styles.resultText}>
+                  Mật khẩu mặc định:{" "}
+                  <Text style={styles.resultBold}>
+                    {createdInfo.defaultPassword}
+                  </Text>
+                </Text>
+              ) : null}
+              <Text style={styles.resultHint}>
+                Hãy gửi thông tin này cho giảng viên để đăng nhập.
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
-export default CreateTeacher;
+export default CreateIdTeacher;
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  backBtn: { width: 40, height: 40, justifyContent: "center" },
+  headerTitle: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
-    padding: 20,
+    textAlign: "center",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#1A1A1A",
   },
-
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 25,
-    color: "#111827",
+  headerSpacer: { width: 40 },
+  scroll: { padding: 20, paddingBottom: 40 },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
   },
-
   input: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginBottom: 15,
-    fontSize: 16,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 16,
+    fontSize: 15,
+    color: "#1A1A1A",
   },
-
   button: {
-    backgroundColor: "#4F46E5",
-    borderRadius: 10,
-    paddingVertical: 15,
+    backgroundColor: "#5B5BD6",
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 8,
   },
-
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-
+  buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   resultBox: {
-    marginTop: 25,
+    marginTop: 24,
     backgroundColor: "#ECFDF5",
     borderWidth: 1,
     borderColor: "#A7F3D0",
-    borderRadius: 10,
-    padding: 15,
+    borderRadius: 14,
+    padding: 16,
   },
-
-  resultTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#065F46",
-    marginBottom: 10,
+  resultHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
   },
-
-  resultText: {
-    fontSize: 16,
-    marginBottom: 6,
-    color: "#111827",
+  resultTitle: { fontSize: 16, fontWeight: "700", color: "#065F46" },
+  resultText: { fontSize: 14, color: "#374151", marginBottom: 6 },
+  resultBold: { fontWeight: "700", color: "#111827" },
+  resultHint: {
+    fontSize: 12,
+    color: "#059669",
+    marginTop: 8,
+    fontStyle: "italic",
   },
 });

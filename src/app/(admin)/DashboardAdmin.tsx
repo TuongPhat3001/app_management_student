@@ -1,197 +1,300 @@
-import axios from "axios";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import apiClient from "@/src/api/axios";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-interface DashboardStats {
-  totalStudents: number;
-  totalTeachers: number;
-  totalClasses: number;
-  pendingAssignments: number;
-  newNotifications: number;
-}
+const DashboardAdmin = () => {
+  const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading] = useState(false);
 
-const DashboardAdmin: React.FC = () => {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalStudents: 0,
-    totalTeachers: 0,
+  const [stats, setStats] = useState({
     totalClasses: 0,
-    pendingAssignments: 0,
+    pendingAssign: 0,
     newNotifications: 0,
   });
 
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchDashboard();
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await apiClient.get("/admin/dashboard-stats");
+      setStats(res.data);
+      await new Promise((r) => setTimeout(r, 600));
+    } finally {
+      setRefreshing(false);
+    }
   }, []);
 
-  const fetchDashboard = async () => {
-    try {
-      const res = await axios.get("/dashboard/admin");
-      setStats(res.data);
-    } catch (error) {
-      console.log("Dashboard Error:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const quickActions = [
+    {
+      id: "student",
+      label: "+ Tạo sinh viên mới",
+      route: "/(admin)/CreateIdStudent",
+      icon: "person-add-outline" as const,
+    },
+    {
+      id: "teacher",
+      label: "+ Tạo giảng viên mới",
+      route: "/(admin)/CreateIdTeacher",
+      icon: "school-outline" as const,
+    },
+    {
+      id: "class",
+      label: "+ Tạo lớp học mới",
+      route: "/(admin)/CreateClass",
+      icon: "albums-outline" as const,
+    },
+  ];
 
-  const Card = ({
-    title,
-    value,
-    color = "#111827",
-  }: {
-    title: string;
-    value: number;
-    color?: string;
-  }) => (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={[styles.cardValue, { color }]}>{value}</Text>
-    </View>
-  );
+  const mainActions = [
+    {
+      id: "assign",
+      label: "Phân công giảng viên",
+      route: "/(admin)/AssignTeacher",
+      icon: "people-outline" as const,
+    },
+    {
+      id: "notify",
+      label: "Gửi thông báo",
+      route: "/(admin)/SendNotification",
+      icon: "megaphone-outline" as const,
+    },
+    {
+      id: "users",
+      label: "Quản lý người dùng",
+      route: "/(admin)/Users",
+      icon: "person-outline" as const,
+    },
+    {
+      id: "courses",
+      label: "Quản lý môn học",
+      route: "/(admin)/Courses",
+      icon: "book-outline" as const,
+    },
+    {
+      id: "exams",
+      label: "Quản lý kỳ thi",
+      route: "/(admin)/Exams",
+      icon: "clipboard-outline" as const,
+    },
+    {
+      id: "reports",
+      label: "Báo cáo thống kê",
+      route: "/(admin)/Reports",
+      icon: "stats-chart-outline" as const,
+    },
+  ];
+
+  const goTo = (route: string) => {
+    router.push(route as any);
+  };
 
   if (loading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#2563EB" />
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#5B5BD6" />
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.header}>Quản Trị Viên</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
 
-      <Card title="Tổng sinh viên" value={stats.totalStudents} />
-      <Card title="Tổng giảng viên" value={stats.totalTeachers} />
-      <Card title="Tổng lớp học" value={stats.totalClasses} />
-      <Card
-        title="Lớp chờ phân công"
-        value={stats.pendingAssignments}
-        color="#EA580C"
-      />
-      <Card
-        title="Thông báo mới"
-        value={stats.newNotifications}
-        color="#2563EB"
-      />
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>Admin Dashboard</Text>
+          <Text style={styles.headerSub}>Quản trị hệ thống</Text>
+        </View>
+        <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
+          <Ionicons name="refresh" size={20} color="#5B5BD6" />
+        </TouchableOpacity>
+      </View>
 
-      <Text style={styles.sectionTitle}>Quản lý nhanh</Text>
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() =>
-          router.push({ pathname: "(/admin)/CreateStudent" } as any)
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#5B5BD6"]}
+            tintColor="#5B5BD6"
+          />
         }>
-        <Text style={styles.buttonText}>+ Tạo sinh viên mới</Text>
-      </TouchableOpacity>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Tổng lớp học</Text>
+          <Text style={styles.statValue}>{stats.totalClasses}</Text>
+        </View>
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() =>
-          router.push({ pathname: "(/admin)/CreateTeacher" } as any)
-        }>
-        <Text style={styles.buttonText}>+ Tạo giảng viên mới</Text>
-      </TouchableOpacity>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Lớp chờ phân công</Text>
+          <Text style={[styles.statValue, { color: "#F97316" }]}>
+            {stats.pendingAssign}
+          </Text>
+        </View>
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() =>
-          router.push({ pathname: "(/admin)/CreateClass" } as any)
-        }>
-        <Text style={styles.buttonText}>+ Tạo lớp học mới</Text>
-      </TouchableOpacity>
+        <View style={styles.statCard}>
+          <Text style={styles.statLabel}>Thông báo mới</Text>
+          <Text style={[styles.statValue, { color: "#2563EB" }]}>
+            {stats.newNotifications}
+          </Text>
+        </View>
 
-      <Text style={styles.sectionTitle}>Chức năng chính</Text>
+        <Text style={styles.sectionTitle}>Quản lý nhanh</Text>
+        {quickActions.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            style={styles.actionBtn}
+            activeOpacity={0.7}
+            onPress={() => goTo(item.route)}>
+            <View style={styles.actionLeft}>
+              <Ionicons name={item.icon} size={20} color="#5B5BD6" />
+              <Text style={styles.actionText}>{item.label}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        ))}
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() =>
-          router.push({ pathname: "(/admin)/AssignTeacher" } as any)
-        }>
-        <Text style={styles.buttonText}>Phân công giảng viên</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() =>
-          router.push({ pathname: "(/admin)/SendNotification" } as any)
-        }>
-        <Text style={styles.buttonText}>Gửi thông báo</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+          Chức năng chính
+        </Text>
+        {mainActions.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            style={styles.actionBtn}
+            activeOpacity={0.7}
+            onPress={() => goTo(item.route)}>
+            <View style={styles.actionLeft}>
+              <Ionicons name={item.icon} size={20} color="#374151" />
+              <Text style={styles.actionTextMain}>{item.label}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 export default DashboardAdmin;
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
-    padding: 16,
+    backgroundColor: "#F3EEFF",
   },
-
-  loading: {
+  center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#F3EEFF",
   },
-
   header: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "#111827",
-  },
-
-  card: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 15,
-    elevation: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
   },
-
-  cardTitle: {
-    color: "#6B7280",
-    fontSize: 15,
-  },
-
-  cardValue: {
-    marginTop: 8,
-    fontSize: 32,
-    fontWeight: "bold",
-  },
-
-  sectionTitle: {
+  headerTitle: {
     fontSize: 22,
-    fontWeight: "bold",
-    marginTop: 25,
-    marginBottom: 12,
-    color: "#111827",
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  headerSub: {
+    fontSize: 13,
+    color: "#8A8A8A",
+    marginTop: 2,
+  },
+  refreshBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#EDE9FE",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scroll: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
   },
 
-  button: {
+  // Stats
+  statCard: {
     backgroundColor: "#FFFFFF",
-    padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
     marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
     elevation: 2,
   },
-
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "600",
+  statLabel: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginBottom: 6,
+  },
+  statValue: {
+    fontSize: 32,
+    fontWeight: "700",
     color: "#111827",
+  },
+
+  // Sections
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  actionBtn: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  actionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  actionText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  actionTextMain: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#1A1A1A",
   },
 });
