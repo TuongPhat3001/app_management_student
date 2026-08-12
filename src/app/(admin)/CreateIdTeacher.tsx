@@ -17,12 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/**
- * POST /teachers
- * Body khớp CreateTeacherRequest (Go):
- *   required: username, fullName, teacherCode
- *   optional: password, email, department, specialization, phone, joinYear
- */
+
 interface TeacherForm {
   username: string;
   password: string;

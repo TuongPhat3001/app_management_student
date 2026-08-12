@@ -3,6 +3,22 @@ import { Tabs } from "expo-router";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
+function TabIcon({
+  name,
+  color,
+  focused,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  color: string;
+  focused: boolean;
+}) {
+  return (
+    <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
+      <Ionicons name={name} size={22} color={color} />
+    </View>
+  );
+}
+
 export default function TeacherLayout() {
   return (
     <Tabs
@@ -12,7 +28,6 @@ export default function TeacherLayout() {
         tabBarInactiveTintColor: "#9CA3AF",
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarItemStyle: styles.tabItem,
       }}>
       <Tabs.Screen
         name="DashboardTeacher"
@@ -70,25 +85,29 @@ export default function TeacherLayout() {
         }}
       />
 
-      <Tabs.Screen name="class-offers" options={{ href: null }} />
-      <Tabs.Screen name="page" options={{ href: null }} />
-    </Tabs>
-  );
-}
+      <Tabs.Screen
+        name="ViewSuggestClass"
+        options={{
+          title: "Phân công",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? "mail" : "mail-outline"}
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
 
-function TabIcon({
-  name,
-  color,
-  focused,
-}: {
-  name: React.ComponentProps<typeof Ionicons>["name"];
-  color: string;
-  focused: boolean;
-}) {
-  return (
-    <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-      <Ionicons name={name} size={22} color={color} />
-    </View>
+      <Tabs.Screen name="class-offers" options={{ href: null }} />
+      <Tabs.Screen name="RespondClassOffer" options={{ href: null }} />
+      <Tabs.Screen name="AcceptClassOffer" options={{ href: null }} />
+      <Tabs.Screen name="RejectClassOffer" options={{ href: null }} />
+      <Tabs.Screen name="page" options={{ href: null }} />
+      <Tabs.Screen name="accept" options={{ href: null }} />
+      <Tabs.Screen name="reject" options={{ href: null }} />
+      <Tabs.Screen name="respond" options={{ href: null }} />
+    </Tabs>
   );
 }
 
@@ -110,9 +129,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     marginTop: 2,
-  },
-  tabItem: {
-    paddingTop: 2,
   },
   iconWrap: {
     width: 36,

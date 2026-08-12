@@ -1,441 +1,442 @@
-import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import axios from "axios";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
-  StatusBar,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-interface StudentGrade {
-  id: string;
-  studentId: string;
-  name: string;
-  midterm: number | null;
-  final: number | null;
-  assignment: number | null;
-  total: number | null;
-}
+type ClassItem = {
+  id?: number;
+  classId?: number;
+  classCode?: string;
+  courseName?: string;
+};
 
-interface ClassItem {
-  id: string;
-  name: string;
-  code: string;
-  students: number;
-}
-
-const CLASSES: ClassItem[] = [
-  { id: "1", name: "Database Systems", code: "CSDL-202", students: 40 },
-  { id: "2", name: "Web Development", code: "WEB-205", students: 35 },
-  { id: "3", name: "Software Engineering", code: "SE-101", students: 42 },
-];
-
-const MOCK_GRADES: StudentGrade[] = [
-  {
-    id: "1",
-    studentId: "20260001",
-    name: "Nguyễn Văn An",
-    midterm: 8.5,
-    final: 9.0,
-    assignment: 8.0,
-    total: 8.6,
-  },
-  {
-    id: "2",
-    studentId: "20260002",
-    name: "Trần Thị Bình",
-    midterm: 7.0,
-    final: 8.0,
-    assignment: 7.5,
-    total: 7.6,
-  },
-  {
-    id: "3",
-    studentId: "20260003",
-    name: "Lê Minh Cường",
-    midterm: 9.0,
-    final: 9.5,
-    assignment: 9.0,
-    total: 9.2,
-  },
-  {
-    id: "4",
-    studentId: "20260004",
-    name: "Phạm Thu Hà",
-    midterm: 6.5,
-    final: null,
-    assignment: 7.0,
-    total: null,
-  },
-  {
-    id: "5",
-    studentId: "20260005",
-    name: "Hoàng Đức Khoa",
-    midterm: 8.0,
-    final: 7.5,
-    assignment: 8.5,
-    total: 7.9,
-  },
-  {
-    id: "6",
-    studentId: "20260006",
-    name: "Vũ Thị Lan",
-    midterm: null,
-    final: null,
-    assignment: 8.0,
-    total: null,
-  },
-];
-
-const getGradeColor = (g: number | null) => {
-  if (g === null) return "#9CA3AF";
-  if (g >= 8.5) return "#059669";
-  if (g >= 7.0) return "#0EA5E9";
-  if (g >= 5.0) return "#D97706";
-  return "#DC2626";
+type GradeItem = {
+  id?: number;
+  enrollmentId?: number;
+  studentId?: number;
+  studentCode?: string;
+  studentName?: string;
+  assignmentScore?: number;
+  midtermScore?: number;
+  finalScore?: number;
+  totalScore?: number;
+  gradeLetter?: string;
+  status?: string;
 };
 
 const Grades = () => {
-  const [selectedClass, setSelectedClass] = useState<ClassItem>(CLASSES[0]);
-  const [showClassPicker, setShowClassPicker] = useState(false);
-  const [grades, setGrades] = useState<StudentGrade[]>(MOCK_GRADES);
-  const [editStudent, setEditStudent] = useState<StudentGrade | null>(null);
-  const [editField, setEditField] = useState<
-    "midterm" | "final" | "assignment"
-  >("midterm");
-  const [editValue, setEditValue] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+  const [grades, setGrades] = useState<GradeItem[]>([]);
+  const [loadingGrades, setLoadingGrades] = useState(false);
 
-  const openEdit = (
-    student: StudentGrade,
-    field: "midterm" | "final" | "assignment",
-  ) => {
-    setEditStudent(student);
-    setEditField(field);
-    const val = student[field];
-    setEditValue(val !== null ? String(val) : "");
-  };
+  const [editItem, setEditItem] = useState<GradeItem | null>(null);
+  const [assignment, setAssignment] = useState("");
+  const [midterm, setMidterm] = useState("");
+  const [finalScore, setFinalScore] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const saveGrade = () => {
-    if (!editStudent) return;
-    const num = parseFloat(editValue);
-    if (isNaN(num) || num < 0 || num > 10) {
-      Alert.alert("Lỗi", "Điểm phải từ 0 đến 10");
-      return;
+  useEffect(() => {
+    loadClasses();
+  }, []);
+
+  const loadClasses = async () => {
+    try {
+      const res = await axios.get("/teacher/classes");
+      setClasses(res.data?.data || res.data || []);
+    } catch {
+      setClasses([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setGrades((prev) =>
-      prev.map((g) => {
-        if (g.id !== editStudent.id) return g;
-        const updated = { ...g, [editField]: num };
-        const { midterm, final, assignment } = updated;
-        if (midterm !== null && final !== null && assignment !== null) {
-          updated.total = parseFloat(
-            (midterm * 0.3 + assignment * 0.2 + final * 0.5).toFixed(1),
-          );
-        }
-        return updated;
-      }),
-    );
-    setEditStudent(null);
   };
 
-  const renderStudent = ({ item }: { item: StudentGrade }) => (
-    <View style={styles.studentCard}>
-      <View style={styles.studentHeader}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.studentName}>{item.name}</Text>
-          <Text style={styles.studentId}>{item.studentId}</Text>
-        </View>
-        <Text style={[styles.totalGrade, { color: getGradeColor(item.total) }]}>
-          {item.total !== null ? item.total : "—"}
-        </Text>
-      </View>
+  const getClassId = (item: ClassItem) => item.classId || item.id || 0;
 
-      <View style={styles.gradeRow}>
-        {(["midterm", "assignment", "final"] as const).map((field) => {
-          const labels = {
-            midterm: "Giữa kỳ",
-            assignment: "Bài tập",
-            final: "Cuối kỳ",
-          };
-          const val = item[field];
-          return (
-            <TouchableOpacity
-              key={field}
-              style={styles.gradeBox}
-              onPress={() => openEdit(item, field)}
-              activeOpacity={0.7}>
-              <Text style={styles.gradeBoxLabel}>{labels[field]}</Text>
-              <Text
-                style={[styles.gradeBoxValue, { color: getGradeColor(val) }]}>
-                {val !== null ? val : "Nhập"}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+  const loadGrades = async (classId: number) => {
+    setSelectedClassId(classId);
+    setLoadingGrades(true);
+    try {
+      const res = await axios.get(`/classes/${classId}/grades`);
+      setGrades(res.data?.data || res.data || []);
+    } catch {
+      setGrades([]);
+      Alert.alert("Lỗi", "Không tải được bảng điểm lớp");
+    } finally {
+      setLoadingGrades(false);
+    }
+  };
+
+  const openEdit = (item: GradeItem) => {
+    setEditItem(item);
+    setAssignment(String(item.assignmentScore ?? ""));
+    setMidterm(String(item.midtermScore ?? ""));
+    setFinalScore(String(item.finalScore ?? ""));
+  };
+
+  const calcTotal = () => {
+    const a = parseFloat(assignment) || 0;
+    const m = parseFloat(midterm) || 0;
+    const f = parseFloat(finalScore) || 0;
+    return Math.round((a * 0.3 + m * 0.3 + f * 0.4) * 100) / 100;
+  };
+
+  const saveGrade = async () => {
+    if (!editItem) return;
+    setSaving(true);
+    try {
+      const body = {
+        enrollmentId: editItem.enrollmentId || editItem.id,
+        assignmentScore: parseFloat(assignment) || 0,
+        midtermScore: parseFloat(midterm) || 0,
+        finalScore: parseFloat(finalScore) || 0,
+        totalScore: calcTotal(),
+      };
+
+      if (editItem.id) {
+        await axios.put(`/grades/${editItem.id}`, body);
+      } else {
+        await axios.post("/grades", body);
+      }
+
+      Alert.alert("Thành công", "Đã lưu điểm");
+      setEditItem(null);
+      if (selectedClassId) loadGrades(selectedClassId);
+    } catch (err: any) {
+      Alert.alert("Lỗi", err.response?.data?.message || "Không lưu được điểm");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const approveGrade = async (gradeId?: number) => {
+    if (!gradeId) return;
+    try {
+      await axios.post(`/grades/${gradeId}/approve`);
+      Alert.alert("Thành công", "Đã duyệt điểm");
+      if (selectedClassId) loadGrades(selectedClassId);
+    } catch (err: any) {
+      Alert.alert(
+        "Lỗi",
+        err.response?.data?.message || "Không duyệt được điểm",
+      );
+    }
+  };
+
+  const approveAll = async () => {
+    if (!selectedClassId) return;
+    Alert.alert("Duyệt cả lớp", "Duyệt tất cả điểm của lớp này?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Duyệt",
+        onPress: async () => {
+          try {
+            await axios.post(`/classes/${selectedClassId}/grades/approve`);
+            Alert.alert("Thành công", "Đã duyệt điểm cả lớp");
+            loadGrades(selectedClassId);
+          } catch (err: any) {
+            Alert.alert(
+              "Lỗi",
+              err.response?.data?.message || "Không duyệt được",
+            );
+          }
+        },
+      },
+    ]);
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#2563eb" />
       </View>
-    </View>
-  );
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
+    <View style={styles.container}>
+      <Text style={styles.title}>Quản lý điểm</Text>
 
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Quản lý điểm</Text>
-      </View>
-
-      {/* Class selector */}
-      <TouchableOpacity
-        style={styles.classSelector}
-        onPress={() => setShowClassPicker(!showClassPicker)}
-        activeOpacity={0.7}>
-        <View>
-          <Text style={styles.classSelectorLabel}>Lớp học phần</Text>
-          <Text style={styles.classSelectorValue}>
-            {selectedClass.name} ({selectedClass.code})
-          </Text>
-        </View>
-        <Ionicons
-          name={showClassPicker ? "chevron-up" : "chevron-down"}
-          size={20}
-          color="#6B7280"
+      {!selectedClassId ? (
+        <FlatList
+          data={classes}
+          keyExtractor={(item, idx) => String(getClassId(item) || idx)}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                loadClasses();
+              }}
+            />
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>Không có lớp phụ trách</Text>
+          }
+          renderItem={({ item }) => {
+            const classId = getClassId(item);
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() => loadGrades(classId)}>
+                <Text style={styles.classCode}>
+                  {item.classCode || `Lớp #${classId}`}
+                </Text>
+                {!!item.courseName && (
+                  <Text style={styles.meta}>{item.courseName}</Text>
+                )}
+                <Text style={styles.link}>Xem / nhập điểm ›</Text>
+              </TouchableOpacity>
+            );
+          }}
         />
-      </TouchableOpacity>
-
-      {showClassPicker && (
-        <View style={styles.pickerList}>
-          {CLASSES.map((c) => (
-            <TouchableOpacity
-              key={c.id}
-              style={styles.pickerItem}
-              onPress={() => {
-                setSelectedClass(c);
-                setShowClassPicker(false);
-              }}>
-              <Text
-                style={[
-                  styles.pickerItemText,
-                  c.id === selectedClass.id && styles.pickerItemActive,
-                ]}>
-                {c.name} — {c.students} SV
-              </Text>
+      ) : (
+        <>
+          <View style={styles.toolbar}>
+            <TouchableOpacity onPress={() => setSelectedClassId(null)}>
+              <Text style={styles.back}>‹ Quay lại</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+            <TouchableOpacity onPress={approveAll}>
+              <Text style={styles.approveAll}>Duyệt cả lớp</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loadingGrades ? (
+            <ActivityIndicator style={{ marginTop: 40 }} color="#2563eb" />
+          ) : (
+            <FlatList
+              data={grades}
+              keyExtractor={(item, idx) =>
+                String(item.id || item.enrollmentId || idx)
+              }
+              ListEmptyComponent={
+                <Text style={styles.empty}>Chưa có dữ liệu điểm</Text>
+              }
+              renderItem={({ item }) => (
+                <View style={styles.gradeCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.studentName}>
+                      {item.studentName || "Sinh viên"}
+                    </Text>
+                    <Text style={styles.meta}>{item.studentCode || ""}</Text>
+                    <Text style={styles.scoreLine}>
+                      BT: {item.assignmentScore ?? "—"} · GK:{" "}
+                      {item.midtermScore ?? "—"} · CK: {item.finalScore ?? "—"}
+                    </Text>
+                    <Text style={styles.total}>
+                      Tổng: {item.totalScore ?? "—"} ({item.gradeLetter || "—"})
+                    </Text>
+                    <Text style={styles.status}>{item.status || "Draft"}</Text>
+                  </View>
+                  <View style={styles.actions}>
+                    <TouchableOpacity
+                      style={styles.btnEdit}
+                      onPress={() => openEdit(item)}>
+                      <Text style={styles.btnEditText}>Sửa</Text>
+                    </TouchableOpacity>
+                    {item.id && item.status !== "Approved" && (
+                      <TouchableOpacity
+                        style={styles.btnApprove}
+                        onPress={() => approveGrade(item.id)}>
+                        <Text style={styles.btnApproveText}>Duyệt</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
+            />
+          )}
+        </>
       )}
 
-      {/* Summary */}
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryText}>
-          {grades.length} sinh viên · Đã nhập:{" "}
-          {grades.filter((g) => g.total !== null).length}
-        </Text>
-      </View>
-
-      <FlatList
-        data={grades}
-        keyExtractor={(item) => item.id}
-        renderItem={renderStudent}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-      />
-
-      {/* Edit modal */}
-      <Modal visible={!!editStudent} transparent animationType="fade">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+      {/* Modal sửa điểm */}
+      <Modal visible={!!editItem} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>
-              Nhập điểm — {editStudent?.name}
+              Nhập điểm — {editItem?.studentName || ""}
             </Text>
-            <Text style={styles.modalSubtitle}>
-              {editField === "midterm"
-                ? "Điểm giữa kỳ"
-                : editField === "final"
-                  ? "Điểm cuối kỳ"
-                  : "Điểm bài tập"}
-            </Text>
+
+            <Text style={styles.label}>Điểm bài tập (30%)</Text>
             <TextInput
               style={styles.input}
-              value={editValue}
-              onChangeText={setEditValue}
-              keyboardType="decimal-pad"
+              keyboardType="numeric"
+              value={assignment}
+              onChangeText={setAssignment}
               placeholder="0 - 10"
-              placeholderTextColor="#9CA3AF"
-              autoFocus
             />
+
+            <Text style={styles.label}>Điểm giữa kỳ (30%)</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="numeric"
+              value={midterm}
+              onChangeText={setMidterm}
+              placeholder="0 - 10"
+            />
+
+            <Text style={styles.label}>Điểm cuối kỳ (40%)</Text>
+            <TextInput
+              style={styles.input}
+              keyboardType="numeric"
+              value={finalScore}
+              onChangeText={setFinalScore}
+              placeholder="0 - 10"
+            />
+
+            <Text style={styles.preview}>Tổng dự kiến: {calcTotal()}</Text>
+
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => setEditStudent(null)}>
-                <Text style={styles.cancelText}>Hủy</Text>
+                style={styles.btnCancel}
+                onPress={() => setEditItem(null)}>
+                <Text style={styles.btnCancelText}>Hủy</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={saveGrade}>
-                <Text style={styles.saveText}>Lưu điểm</Text>
+              <TouchableOpacity
+                style={styles.btnSave}
+                onPress={saveGrade}
+                disabled={saving}>
+                <Text style={styles.btnSaveText}>
+                  {saving ? "Đang lưu..." : "Lưu điểm"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
 export default Grades;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
-  headerTitle: { fontSize: 22, fontWeight: "700", color: "#1A1A1A" },
-
-  classSelector: {
-    flexDirection: "row",
+  container: { flex: 1, backgroundColor: "#f8fafc", padding: 16 },
+  center: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 16,
-    marginTop: 14,
-    borderRadius: 14,
-    padding: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: "#f8fafc",
   },
-  classSelectorLabel: { fontSize: 12, color: "#9CA3AF", marginBottom: 2 },
-  classSelectorValue: { fontSize: 15, fontWeight: "600", color: "#1A1A1A" },
-  pickerList: {
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 16,
-    marginTop: 6,
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 14,
+  },
+  card: {
+    backgroundColor: "#fff",
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    overflow: "hidden",
-  },
-  pickerItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  pickerItemText: { fontSize: 14, color: "#374151" },
-  pickerItemActive: { color: "#5B5BD6", fontWeight: "600" },
-
-  summaryRow: { paddingHorizontal: 20, paddingVertical: 10 },
-  summaryText: { fontSize: 13, color: "#6B7280" },
-
-  list: { paddingHorizontal: 16, paddingBottom: 32 },
-  studentCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
     padding: 14,
     marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
-  studentHeader: {
+  classCode: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
+  meta: { fontSize: 13, color: "#64748b", marginTop: 2 },
+  link: { marginTop: 8, color: "#2563eb", fontWeight: "600" },
+  empty: { textAlign: "center", color: "#94a3b8", marginTop: 40 },
+  toolbar: {
     flexDirection: "row",
-    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#EDE9FE",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
+  back: { color: "#2563eb", fontWeight: "700", fontSize: 15 },
+  approveAll: { color: "#059669", fontWeight: "700", fontSize: 15 },
+  gradeCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexDirection: "row",
+    gap: 10,
   },
-  avatarText: { fontSize: 16, fontWeight: "700", color: "#5B5BD6" },
-  studentName: { fontSize: 15, fontWeight: "600", color: "#1A1A1A" },
-  studentId: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
-  totalGrade: { fontSize: 20, fontWeight: "700" },
-
-  gradeRow: { flexDirection: "row", gap: 8 },
-  gradeBox: {
-    flex: 1,
-    backgroundColor: "#F9FAFB",
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: "center",
+  studentName: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
+  scoreLine: { fontSize: 13, color: "#64748b", marginTop: 4 },
+  total: { fontSize: 14, fontWeight: "700", color: "#1e293b", marginTop: 4 },
+  status: { fontSize: 12, color: "#94a3b8", marginTop: 2 },
+  actions: { justifyContent: "center", gap: 8 },
+  btnEdit: {
+    backgroundColor: "#e2e8f0",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  gradeBoxLabel: { fontSize: 11, color: "#9CA3AF", marginBottom: 2 },
-  gradeBoxValue: { fontSize: 16, fontWeight: "700" },
-
+  btnEditText: { fontWeight: "700", color: "#1e293b" },
+  btnApprove: {
+    backgroundColor: "#dcfce7",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  btnApproveText: { fontWeight: "700", color: "#059669" },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
-    paddingHorizontal: 28,
+    padding: 20,
   },
-  modalCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 24,
+  modalBox: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
   },
   modalTitle: {
     fontSize: 17,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    textAlign: "center",
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 14,
   },
-  modalSubtitle: {
-    fontSize: 14,
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 4,
-    marginBottom: 20,
-  },
+  label: { fontSize: 13, color: "#64748b", marginBottom: 6, marginTop: 8 },
   input: {
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 24,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: "#0f172a",
+  },
+  preview: {
+    marginTop: 12,
+    fontSize: 15,
     fontWeight: "700",
-    textAlign: "center",
-    color: "#1A1A1A",
-    marginBottom: 20,
+    color: "#2563eb",
   },
-  modalActions: { flexDirection: "row", gap: 12 },
-  cancelBtn: {
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
+  btnCancel: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 10,
+    paddingVertical: 12,
     alignItems: "center",
   },
-  cancelText: { fontSize: 15, fontWeight: "600", color: "#6B7280" },
-  saveBtn: {
+  btnCancelText: { fontWeight: "700", color: "#475569" },
+  btnSave: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#5B5BD6",
+    backgroundColor: "#2563eb",
+    borderRadius: 10,
+    paddingVertical: 12,
     alignItems: "center",
   },
-  saveText: { fontSize: 15, fontWeight: "600", color: "#FFFFFF" },
+  btnSaveText: { fontWeight: "700", color: "#fff" },
 });

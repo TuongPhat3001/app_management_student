@@ -13,7 +13,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ============ Types ============
 type Step = "search" | "list" | "confirm" | "success" | "registered";
 
 interface Course {
@@ -25,11 +24,10 @@ interface Course {
   schedule?: string;
   time?: string;
   room?: string;
-  slots: string; // e.g. "12/40"
+  slots: string;
   registered?: boolean;
 }
 
-// ============ Mock data ============
 const MOCK_COURSES: Course[] = [
   {
     id: 1,
@@ -107,7 +105,6 @@ const MOCK_REGISTERED: Course[] = [
 
 const SEMESTERS = ["Học kỳ 1-2026", "Học kỳ 2-2025", "Học kỳ 1-2025"];
 
-// ============ Component ============
 const RegisterCourses: React.FC = () => {
   const [step, setStep] = useState<Step>("search");
   const [semester, setSemester] = useState(SEMESTERS[0]);
@@ -121,10 +118,8 @@ const RegisterCourses: React.FC = () => {
     useState<Course[]>(MOCK_REGISTERED);
   const [loading, setLoading] = useState(false);
 
-  // ---- Actions ----
   const handleSearch = () => {
     setLoading(true);
-    // Giả lập tìm kiếm
     setTimeout(() => {
       setCourses(MOCK_COURSES);
       setLoading(false);

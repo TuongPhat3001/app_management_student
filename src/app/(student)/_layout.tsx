@@ -99,7 +99,6 @@ export default function StudentLayout() {
         }}
       />
 
-      {/* Ẩn khỏi tab — mở từ thẻ thống kê trên Dashboard */}
       <Tabs.Screen name="QrAttendance" options={{ href: null }} />
       <Tabs.Screen name="ViewTranscript" options={{ href: null }} />
       <Tabs.Screen name="Attendance" options={{ href: null }} />

@@ -17,12 +17,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/**
- * Khớp CreateStudentRequest (Go/Gin):
- * required: username, fullName, studentCode, classId
- * optional: password, email, dateOfBirth, gender, phone, address, enrollmentDate, status
- * password mặc định backend: Student@123
- */
 interface StudentForm {
   username: string;
   password: string;

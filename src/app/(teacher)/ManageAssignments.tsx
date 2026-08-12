@@ -1,478 +1,411 @@
-import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import axios from "axios";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
-  ScrollView,
-  StatusBar,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-type AssignmentStatus = "open" | "closed" | "grading";
+type ExerciseItem = {
+  id: number;
+  title?: string;
+  description?: string;
+  dueDate?: string;
+  status?: string;
+  classId?: number;
+  class?: { classCode?: string };
+};
 
-interface Assignment {
-  id: string;
-  title: string;
-  course: string;
-  courseCode: string;
-  dueDate: string;
-  submitted: number;
-  total: number;
-  status: AssignmentStatus;
-}
+type SubmissionItem = {
+  id: number;
+  content?: string;
+  fileURL?: string;
+  submittedAt?: string;
+  status?: string;
+  score?: number | null;
+  feedback?: string;
+  student?: {
+    studentCode?: string;
+    user?: { fullName?: string };
+  };
+};
 
-const MOCK_ASSIGNMENTS: Assignment[] = [
-  {
-    id: "1",
-    title: "Bài tập SQL Queries",
-    course: "Database Systems",
-    courseCode: "CSDL-202",
-    dueDate: "30/07/2026",
-    submitted: 28,
-    total: 40,
-    status: "open",
-  },
-  {
-    id: "2",
-    title: "Project React Native App",
-    course: "Web Development",
-    courseCode: "WEB-205",
-    dueDate: "05/08/2026",
-    submitted: 12,
-    total: 35,
-    status: "open",
-  },
-  {
-    id: "3",
-    title: "UML Diagrams",
-    course: "Software Engineering",
-    courseCode: "SE-101",
-    dueDate: "20/07/2026",
-    submitted: 42,
-    total: 42,
-    status: "grading",
-  },
-  {
-    id: "4",
-    title: "Normalization Exercise",
-    course: "Database Systems",
-    courseCode: "CSDL-202",
-    dueDate: "15/07/2026",
-    submitted: 38,
-    total: 40,
-    status: "closed",
-  },
-];
-
-const STATUS_CONFIG = {
-  open: { label: "Đang mở", bg: "#D1FAE5", color: "#059669" },
-  grading: { label: "Chờ chấm", bg: "#FEF3C7", color: "#D97706" },
-  closed: { label: "Đã đóng", bg: "#F3F4F6", color: "#6B7280" },
+type ClassItem = {
+  id?: number;
+  classId?: number;
+  classCode?: string;
 };
 
 const ManageAssignments = () => {
-  const [assignments, setAssignments] = useState(MOCK_ASSIGNMENTS);
-  const [filter, setFilter] = useState<"all" | AssignmentStatus>("all");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [exercises, setExercises] = useState<ExerciseItem[]>([]);
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+
   const [showCreate, setShowCreate] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newCourse, setNewCourse] = useState("");
-  const [newDue, setNewDue] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [classId, setClassId] = useState<number | null>(null);
+  const [dueDate, setDueDate] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const filtered =
-    filter === "all"
-      ? assignments
-      : assignments.filter((a) => a.status === filter);
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseItem | null>(
+    null,
+  );
+  const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
+  const [loadingSubs, setLoadingSubs] = useState(false);
 
-  const handleCreate = () => {
-    if (!newTitle.trim() || !newCourse.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập tiêu đề và học phần");
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [exRes, classRes] = await Promise.all([
+        axios.get("/exercises"),
+        axios.get("/teacher/classes"),
+      ]);
+      setExercises(exRes.data?.data || exRes.data || []);
+      setClasses(classRes.data?.data || classRes.data || []);
+    } catch {
+      setExercises([]);
+      setClasses([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const openCreate = () => {
+    setTitle("");
+    setDescription("");
+    setDueDate("");
+    setClassId(classes[0] ? classes[0].classId || classes[0].id || null : null);
+    setShowCreate(true);
+  };
+
+  const createExercise = async () => {
+    if (!title.trim()) {
+      Alert.alert("Thông báo", "Vui lòng nhập tiêu đề bài tập");
       return;
     }
-    const item: Assignment = {
-      id: String(Date.now()),
-      title: newTitle.trim(),
-      course: newCourse.trim(),
-      courseCode: "",
-      dueDate: newDue.trim() || "Chưa đặt",
-      submitted: 0,
-      total: 40,
-      status: "open",
-    };
-    setAssignments((prev) => [item, ...prev]);
-    setShowCreate(false);
-    setNewTitle("");
-    setNewCourse("");
-    setNewDue("");
-    Alert.alert("Thành công", "Đã tạo bài tập mới");
+    if (!classId) {
+      Alert.alert("Thông báo", "Vui lòng chọn lớp");
+      return;
+    }
+    setSaving(true);
+    try {
+      await axios.post("/exercises", {
+        title: title.trim(),
+        description: description.trim(),
+        classId,
+        dueDate: dueDate || undefined,
+      });
+      Alert.alert("Thành công", "Đã tạo bài tập");
+      setShowCreate(false);
+      loadData();
+    } catch (err: any) {
+      Alert.alert(
+        "Lỗi",
+        err.response?.data?.message || "Không tạo được bài tập",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const renderItem = ({ item }: { item: Assignment }) => {
-    const cfg = STATUS_CONFIG[item.status];
-    const progress = item.total > 0 ? item.submitted / item.total : 0;
+  const openSubmissions = async (item: ExerciseItem) => {
+    setSelectedExercise(item);
+    setLoadingSubs(true);
+    try {
+      const res = await axios.get(`/exercises/${item.id}/submissions`);
+      setSubmissions(res.data?.data || res.data || []);
+    } catch {
+      setSubmissions([]);
+      Alert.alert("Lỗi", "Không tải được bài nộp");
+    } finally {
+      setLoadingSubs(false);
+    }
+  };
 
+  const formatDate = (value?: string) => {
+    if (!value) return "—";
+    try {
+      return new Date(value).toLocaleString("vi-VN");
+    } catch {
+      return value;
+    }
+  };
+
+  if (loading) {
     return (
-      <TouchableOpacity style={styles.card} activeOpacity={0.7}>
-        <View style={styles.cardTop}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={styles.cardCourse}>
-              {item.course}
-              {item.courseCode ? ` · ${item.courseCode}` : ""}
-            </Text>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-            <Text style={[styles.statusText, { color: cfg.color }]}>
-              {cfg.label}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.metaRow}>
-          <Ionicons name="calendar-outline" size={14} color="#6B7280" />
-          <Text style={styles.metaText}>Hạn nộp: {item.dueDate}</Text>
-        </View>
-
-        <View style={styles.progressSection}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>
-              Đã nộp {item.submitted}/{item.total}
-            </Text>
-            <Text style={styles.progressPct}>
-              {Math.round(progress * 100)}%
-            </Text>
-          </View>
-          <View style={styles.progressBar}>
-            <View
-              style={[styles.progressFill, { width: `${progress * 100}%` }]}
-            />
-          </View>
-        </View>
-
-        <View style={styles.cardActions}>
-          {item.status === "open" && (
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-              <Ionicons name="eye-outline" size={16} color="#5B5BD6" />
-              <Text style={styles.actionBtnText}>Xem bài nộp</Text>
-            </TouchableOpacity>
-          )}
-          {item.status === "grading" && (
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-              <Ionicons name="create-outline" size={16} color="#D97706" />
-              <Text style={[styles.actionBtnText, { color: "#D97706" }]}>
-                Chấm điểm
-              </Text>
-            </TouchableOpacity>
-          )}
-          {item.status === "closed" && (
-            <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-              <Ionicons name="stats-chart-outline" size={16} color="#6B7280" />
-              <Text style={[styles.actionBtnText, { color: "#6B7280" }]}>
-                Xem kết quả
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </TouchableOpacity>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
     );
-  };
+  }
+
+  // Màn hình xem bài nộp
+  if (selectedExercise) {
+    return (
+      <View style={styles.container}>
+        <TouchableOpacity onPress={() => setSelectedExercise(null)}>
+          <Text style={styles.back}>‹ Quay lại</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>{selectedExercise.title}</Text>
+        <Text style={styles.meta}>
+          Hạn nộp: {formatDate(selectedExercise.dueDate)}
+        </Text>
+
+        {loadingSubs ? (
+          <ActivityIndicator style={{ marginTop: 40 }} color="#2563eb" />
+        ) : (
+          <FlatList
+            data={submissions}
+            keyExtractor={(item) => String(item.id)}
+            ListEmptyComponent={
+              <Text style={styles.empty}>Chưa có bài nộp</Text>
+            }
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                <Text style={styles.studentName}>
+                  {item.student?.user?.fullName || "Sinh viên"}
+                </Text>
+                <Text style={styles.meta}>
+                  {item.student?.studentCode || ""} ·{" "}
+                  {formatDate(item.submittedAt)}
+                </Text>
+                {!!item.content && (
+                  <Text style={styles.content} numberOfLines={4}>
+                    {item.content}
+                  </Text>
+                )}
+                <Text style={styles.status}>
+                  {item.status || "submitted"}
+                  {item.score != null ? ` · Điểm: ${item.score}` : ""}
+                </Text>
+              </View>
+            )}
+          />
+        )}
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
-
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Quản lý bài tập</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => setShowCreate(true)}
-          activeOpacity={0.8}>
-          <Ionicons name="add" size={22} color="#FFFFFF" />
+    <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Bài tập</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openCreate}>
+          <Text style={styles.addBtnText}>+ Tạo mới</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}>
-        {(
-          [
-            { key: "all", label: "Tất cả" },
-            { key: "open", label: "Đang mở" },
-            { key: "grading", label: "Chờ chấm" },
-            { key: "closed", label: "Đã đóng" },
-          ] as const
-        ).map((f) => (
-          <TouchableOpacity
-            key={f.key}
-            style={[
-              styles.filterChip,
-              filter === f.key && styles.filterChipActive,
-            ]}
-            onPress={() => setFilter(f.key)}
-            activeOpacity={0.7}>
-            <Text
-              style={[
-                styles.filterChipText,
-                filter === f.key && styles.filterChipTextActive,
-              ]}>
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="document-text-outline" size={64} color="#D1D5DB" />
-            <Text style={styles.emptyText}>Chưa có bài tập nào</Text>
-          </View>
+        data={exercises}
+        keyExtractor={(item) => String(item.id)}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadData();
+            }}
+          />
         }
+        ListEmptyComponent={
+          <Text style={styles.empty}>Chưa có bài tập nào</Text>
+        }
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => openSubmissions(item)}>
+            <Text style={styles.exTitle}>{item.title}</Text>
+            <Text style={styles.meta}>
+              Lớp: {item.class?.classCode || item.classId || "—"}
+            </Text>
+            <Text style={styles.meta}>Hạn: {formatDate(item.dueDate)}</Text>
+            <Text style={styles.link}>Xem bài nộp ›</Text>
+          </TouchableOpacity>
+        )}
       />
 
-      {/* Create modal */}
-      <Modal visible={showCreate} transparent animationType="slide">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+      {/* Modal tạo bài tập */}
+      <Modal visible={showCreate} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Tạo bài tập mới</Text>
 
-            <Text style={styles.inputLabel}>Tiêu đề bài tập</Text>
+            <Text style={styles.label}>Tiêu đề</Text>
             <TextInput
               style={styles.input}
-              placeholder="VD: Bài tập SQL Queries"
-              placeholderTextColor="#9CA3AF"
-              value={newTitle}
-              onChangeText={setNewTitle}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Nhập tiêu đề"
             />
 
-            <Text style={styles.inputLabel}>Học phần</Text>
+            <Text style={styles.label}>Mô tả</Text>
             <TextInput
-              style={styles.input}
-              placeholder="VD: Database Systems"
-              placeholderTextColor="#9CA3AF"
-              value={newCourse}
-              onChangeText={setNewCourse}
+              style={[styles.input, { height: 80 }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Mô tả bài tập"
+              multiline
             />
 
-            <Text style={styles.inputLabel}>Hạn nộp</Text>
+            <Text style={styles.label}>Lớp</Text>
+            <View style={styles.classPick}>
+              {classes.map((c) => {
+                const id = c.classId || c.id || 0;
+                const active = classId === id;
+                return (
+                  <TouchableOpacity
+                    key={id}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => setClassId(id)}>
+                    <Text
+                      style={[
+                        styles.chipText,
+                        active && styles.chipTextActive,
+                      ]}>
+                      {c.classCode || `#${id}`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.label}>Hạn nộp (YYYY-MM-DD)</Text>
             <TextInput
               style={styles.input}
-              placeholder="VD: 30/07/2026"
-              placeholderTextColor="#9CA3AF"
-              value={newDue}
-              onChangeText={setNewDue}
+              value={dueDate}
+              onChangeText={setDueDate}
+              placeholder="2026-07-30"
             />
 
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={styles.cancelBtn}
+                style={styles.btnCancel}
                 onPress={() => setShowCreate(false)}>
-                <Text style={styles.cancelText}>Hủy</Text>
+                <Text style={styles.btnCancelText}>Hủy</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}>
-                <Text style={styles.saveText}>Tạo bài tập</Text>
+              <TouchableOpacity
+                style={styles.btnSave}
+                onPress={createExercise}
+                disabled={saving}>
+                <Text style={styles.btnSaveText}>
+                  {saving ? "Đang tạo..." : "Tạo bài tập"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
 export default ManageAssignments;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-  },
-  headerTitle: { fontSize: 22, fontWeight: "700", color: "#1A1A1A" },
-  addBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#5B5BD6",
+  container: { flex: 1, backgroundColor: "#f8fafc", padding: 16 },
+  center: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#f8fafc",
   },
-
-  filterRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginRight: 8,
-  },
-  filterChipActive: {
-    backgroundColor: "#5B5BD6",
-    borderColor: "#5B5BD6",
-  },
-  filterChipText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  filterChipTextActive: { color: "#FFFFFF" },
-
-  list: { paddingHorizontal: 16, paddingBottom: 32 },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 10,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 3,
-  },
-  cardCourse: { fontSize: 13, color: "#6B7280" },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 10,
-  },
-  statusText: { fontSize: 11, fontWeight: "600" },
-
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 12,
-  },
-  metaText: { fontSize: 13, color: "#6B7280" },
-
-  progressSection: { marginBottom: 12 },
-  progressHeader: {
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  progressLabel: { fontSize: 12, color: "#6B7280" },
-  progressPct: { fontSize: 12, fontWeight: "600", color: "#5B5BD6" },
-  progressBar: {
-    height: 6,
-    backgroundColor: "#E5E7EB",
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#5B5BD6",
-    borderRadius: 3,
-  },
-
-  cardActions: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-    paddingTop: 12,
-  },
-  actionBtn: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    marginBottom: 14,
   },
-  actionBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#5B5BD6",
+  title: { fontSize: 22, fontWeight: "800", color: "#0f172a" },
+  addBtn: {
+    backgroundColor: "#2563eb",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
-
-  empty: { alignItems: "center", paddingTop: 80 },
-  emptyText: { fontSize: 16, color: "#9CA3AF", marginTop: 12 },
-
+  addBtnText: { color: "#fff", fontWeight: "700" },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  exTitle: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
+  studentName: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
+  meta: { fontSize: 13, color: "#64748b", marginTop: 3 },
+  content: { fontSize: 14, color: "#334155", marginTop: 8, lineHeight: 20 },
+  status: { fontSize: 12, color: "#94a3b8", marginTop: 6 },
+  link: { marginTop: 8, color: "#2563eb", fontWeight: "600" },
+  empty: { textAlign: "center", color: "#94a3b8", marginTop: 40 },
+  back: { color: "#2563eb", fontWeight: "700", marginBottom: 10, fontSize: 15 },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    padding: 20,
   },
-  modalCard: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 40,
+  modalBox: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    textAlign: "center",
-    marginBottom: 24,
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 12,
   },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 6,
-  },
+  label: { fontSize: 13, color: "#64748b", marginBottom: 6, marginTop: 8 },
   input: {
-    backgroundColor: "#F3F4F6",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 15,
-    color: "#1A1A1A",
-    marginBottom: 16,
+    color: "#0f172a",
   },
-  modalActions: { flexDirection: "row", gap: 12, marginTop: 8 },
-  cancelBtn: {
+  classPick: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#f8fafc",
+  },
+  chipActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  chipText: { fontSize: 13, color: "#334155", fontWeight: "600" },
+  chipTextActive: { color: "#fff" },
+  modalActions: { flexDirection: "row", gap: 10, marginTop: 18 },
+  btnCancel: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 10,
+    paddingVertical: 12,
     alignItems: "center",
   },
-  cancelText: { fontSize: 15, fontWeight: "600", color: "#6B7280" },
-  saveBtn: {
+  btnCancelText: { fontWeight: "700", color: "#475569" },
+  btnSave: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#5B5BD6",
+    backgroundColor: "#2563eb",
+    borderRadius: 10,
+    paddingVertical: 12,
     alignItems: "center",
   },
-  saveText: { fontSize: 15, fontWeight: "600", color: "#FFFFFF" },
+  btnSaveText: { fontWeight: "700", color: "#fff" },
 });

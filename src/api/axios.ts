@@ -4,7 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
 const apiClient = axios.create({
-  baseURL: "http://192.168.20.94:8080",
+  baseURL: "http://192.168.20.55:8080",
   headers: {
     "Content-Type": "application/json",
   },
