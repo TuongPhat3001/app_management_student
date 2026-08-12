@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { getTeacherDashboardAPI } from "../../api/authApi";
+import HomeScreen from "../HomeScreen";
 
 type DashboardData = {
   classes: number;
@@ -130,6 +131,8 @@ const DashboardTeacher = () => {
         <Text style={styles.greeting}>Dashboard</Text>
         <Text style={styles.name}>Giảng viên</Text>
       </View>
+
+      <HomeScreen role="teacher" embedded />
 
       <View style={styles.statsGrid}>
         {cards.map((item, idx) => (

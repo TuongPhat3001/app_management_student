@@ -6,6 +6,7 @@ export default function AdminLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DashboardAdmin" />
       <Stack.Screen name="CreateIdStudent" />
+      <Stack.Screen name="AddStudentToClass" />
       <Stack.Screen name="CreateIdTeacher" />
       <Stack.Screen name="CreateClass" />
       <Stack.Screen name="AssignTeacher" />

@@ -19,7 +19,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-
 type Mode = "choose" | "reject";
 
 const QUICK_REASONS = [

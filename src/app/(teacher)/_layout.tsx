@@ -70,6 +70,20 @@ export default function TeacherLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="Profile"
+        options={{
+          title: "Hồ sơ",
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name={focused ? "person" : "person-outline"}
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+
       <Tabs.Screen name="class-offers" options={{ href: null }} />
       <Tabs.Screen name="page" options={{ href: null }} />
     </Tabs>
