@@ -128,7 +128,6 @@ const DashboardTeacher = () => {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }>
       <View style={styles.header}>
-        <Text style={styles.greeting}>Dashboard</Text>
         <Text style={styles.name}>Giảng viên</Text>
       </View>
 

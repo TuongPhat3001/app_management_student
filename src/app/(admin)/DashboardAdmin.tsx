@@ -1,9 +1,15 @@
+import { logoutAPI } from "@/src/api/authApi";
 import apiClient from "@/src/api/axios";
+import { useAuth } from "@/src/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -13,9 +19,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import HomeScreen from "../HomeScreen";
 
 const DashboardAdmin = () => {
   const router = useRouter();
+  const { logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -76,6 +84,12 @@ const DashboardAdmin = () => {
       icon: "person-add-outline" as const,
     },
     {
+      id: "student-to-class",
+      label: "+ Thêm SV vào lớp đang học",
+      route: "/(admin)/AddStudentToClass",
+      icon: "people-circle-outline" as const,
+    },
+    {
       id: "teacher",
       label: "+ Tạo giảng viên mới",
       route: "/(admin)/CreateIdTeacher",
@@ -132,6 +146,45 @@ const DashboardAdmin = () => {
     router.push(route as any);
   };
 
+  const handleLogout = () => {
+    Alert.alert("Đăng xuất", "Bạn có chắc muốn đăng xuất?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Đăng xuất",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await logoutAPI();
+          } catch {
+            // vẫn xóa local
+          }
+          try {
+            if (Platform.OS === "web") {
+              await AsyncStorage.multiRemove([
+                "jwt_token",
+                "role",
+                "authToken",
+                "userData",
+              ]);
+            } else {
+              await SecureStore.deleteItemAsync("jwt_token");
+              await SecureStore.deleteItemAsync("role");
+              await AsyncStorage.multiRemove(["authToken", "userData"]);
+            }
+          } catch {
+            // ignore
+          }
+          try {
+            await logout();
+          } catch {
+            // ignore
+          }
+          router.replace("/(auth)/login");
+        },
+      },
+    ]);
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -149,9 +202,14 @@ const DashboardAdmin = () => {
           <Text style={styles.headerTitle}>Admin Dashboard</Text>
           <Text style={styles.headerSub}>Quản trị hệ thống</Text>
         </View>
-        <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
-          <Ionicons name="refresh" size={20} color="#5B5BD6" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
+            <Ionicons name="refresh" size={20} color="#5B5BD6" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.logoutHeaderBtn}
+            onPress={handleLogout}></TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -165,6 +223,8 @@ const DashboardAdmin = () => {
             tintColor="#5B5BD6"
           />
         }>
+        <HomeScreen role="admin" embedded />
+
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>Tổng lớp học</Text>
           <Text style={styles.statValue}>{stats.totalClasses}</Text>
@@ -253,11 +313,24 @@ const styles = StyleSheet.create({
     color: "#8A8A8A",
     marginTop: 2,
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   refreshBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: "#EDE9FE",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logoutHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FEE2E2",
     justifyContent: "center",
     alignItems: "center",
   },

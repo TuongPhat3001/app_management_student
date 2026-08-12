@@ -124,14 +124,7 @@ const Profile = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
 
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="arrow-back" size={22} color="#1A1A1A" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Hồ sơ</Text>
-        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -192,22 +185,13 @@ export default Profile;
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: { fontSize: 20, fontWeight: "700", color: "#1A1A1A" },
+  headerTitle: { fontSize: 22, fontWeight: "700", color: "#1A1A1A" },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 28,
