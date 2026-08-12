@@ -55,15 +55,12 @@ const SendNotification: React.FC = () => {
     const userIdStr = form.recipientUserId.trim();
 
     if (!email && !userIdStr) {
-      Alert.alert(
-        "Thiếu người nhận",
-        "Nhập email người nhận hoặc ID user (recipientUserId).",
-      );
+      Alert.alert("Thiếu người nhận", "Nhập email người nhận ");
       return;
     }
 
     if (userIdStr && (isNaN(Number(userIdStr)) || Number(userIdStr) <= 0)) {
-      Alert.alert("Sai định dạng", "ID user phải là số nguyên dương.");
+      Alert.alert("Sai định dạng");
       return;
     }
 
