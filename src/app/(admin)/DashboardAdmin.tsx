@@ -1,7 +1,7 @@
 import apiClient from "@/src/api/axios";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -17,7 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const DashboardAdmin = () => {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [stats, setStats] = useState({
     totalClasses: 0,
@@ -25,16 +25,48 @@ const DashboardAdmin = () => {
     newNotifications: 0,
   });
 
+  const fetchStats = useCallback(async () => {
+    try {
+      // Thử cả 2 endpoint phổ biến để khớp backend
+      let data: any = null;
+      try {
+        const res = await apiClient.get("/dashboard/admin");
+        data = res.data?.data || res.data;
+      } catch {
+        const res = await apiClient.get("/admin/dashboard-stats");
+        data = res.data?.data || res.data;
+      }
+      if (data) {
+        setStats({
+          totalClasses: Number(data.totalClasses ?? data.total_classes ?? 0),
+          pendingAssign: Number(data.pendingAssign ?? data.pending_assign ?? 0),
+          newNotifications: Number(
+            data.newNotifications ?? data.new_notifications ?? 0,
+          ),
+        });
+      }
+    } catch (e) {
+      console.log("Dashboard stats error:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await fetchStats();
+      setLoading(false);
+    })();
+  }, [fetchStats]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res = await apiClient.get("/admin/dashboard-stats");
-      setStats(res.data);
-      await new Promise((r) => setTimeout(r, 600));
+      await fetchStats();
+      await new Promise((r) => setTimeout(r, 400));
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [fetchStats]);
 
   const quickActions = [
     {

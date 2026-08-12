@@ -1,4 +1,6 @@
 import apiClient from "@/src/api/axios";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -6,11 +8,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface AssignTeacherForm {
   classId: string;
@@ -20,6 +25,7 @@ interface AssignTeacherForm {
 }
 
 const AssignTeacher: React.FC = () => {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState<AssignTeacherForm>({
@@ -38,22 +44,30 @@ const AssignTeacher: React.FC = () => {
 
   const handleSubmit = async () => {
     if (
-      !formData.classId ||
-      !formData.teacherId ||
-      !formData.startTime ||
-      !formData.endTime
+      !formData.classId.trim() ||
+      !formData.teacherId.trim() ||
+      !formData.startTime.trim() ||
+      !formData.endTime.trim()
     ) {
       Alert.alert("Thông báo", "Vui lòng nhập đầy đủ thông tin.");
+      return;
+    }
+
+    const classId = Number(formData.classId);
+    const teacherId = Number(formData.teacherId);
+    if (isNaN(classId) || classId <= 0 || isNaN(teacherId) || teacherId <= 0) {
+      Alert.alert("Thông báo", "ID lớp và ID giảng viên phải là số > 0.");
       return;
     }
 
     setLoading(true);
 
     try {
-      await apiClient.put(`/classes/${formData.classId}/assign-teacher`, {
-        teacherId: Number(formData.teacherId),
-        startTime: formData.startTime,
-        endTime: formData.endTime,
+      await apiClient.put(`/classes/${classId}/assign-teacher`, {
+        teacherId,
+        teacherID: teacherId,
+        startTime: formData.startTime.trim(),
+        endTime: formData.endTime.trim(),
       });
 
       Alert.alert("Thành công", "Phân công giảng viên thành công!");
@@ -65,105 +79,150 @@ const AssignTeacher: React.FC = () => {
         endTime: "",
       });
     } catch (error: any) {
-      Alert.alert(
-        "Lỗi",
-        error?.response?.data?.message || "Phân công thất bại.",
-      );
+      const data = error?.response?.data;
+      const message =
+        data?.message ||
+        data?.error ||
+        (error?.response?.status === 404
+          ? "API phân công chưa có trên backend hoặc ID không tồn tại."
+          : "Phân công thất bại.");
+      Alert.alert("Lỗi", message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Phân Công Giảng Viên</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="ID lớp học"
-          keyboardType="numeric"
-          value={formData.classId}
-          onChangeText={(text) => handleChange("classId", text)}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="ID giảng viên"
-          keyboardType="numeric"
-          value={formData.teacherId}
-          onChangeText={(text) => handleChange("teacherId", text)}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Thời gian bắt đầu (YYYY-MM-DD HH:mm)"
-          value={formData.startTime}
-          onChangeText={(text) => handleChange("startTime", text)}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Thời gian kết thúc (YYYY-MM-DD HH:mm)"
-          value={formData.endTime}
-          onChangeText={(text) => handleChange("endTime", text)}
-        />
-
-        <TouchableOpacity
-          style={[styles.button, loading && { opacity: 0.7 }]}
-          disabled={loading}
-          onPress={handleSubmit}>
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>Phân công giảng viên</Text>
-          )}
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <Text style={styles.headerTitle}>Phân công giảng viên</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled">
+          <Text style={styles.label}>ID lớp học *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: 1"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            value={formData.classId}
+            onChangeText={(text) => handleChange("classId", text)}
+          />
+
+          <Text style={styles.label}>ID giảng viên *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="VD: 2"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            value={formData.teacherId}
+            onChangeText={(text) => handleChange("teacherId", text)}
+          />
+
+          <Text style={styles.label}>Thời gian bắt đầu *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="YYYY-MM-DD HH:mm"
+            placeholderTextColor="#9CA3AF"
+            value={formData.startTime}
+            onChangeText={(text) => handleChange("startTime", text)}
+          />
+
+          <Text style={styles.label}>Thời gian kết thúc *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="YYYY-MM-DD HH:mm"
+            placeholderTextColor="#9CA3AF"
+            value={formData.endTime}
+            onChangeText={(text) => handleChange("endTime", text)}
+          />
+
+          <TouchableOpacity
+            style={[styles.button, loading && { opacity: 0.7 }]}
+            disabled={loading}
+            onPress={handleSubmit}>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.buttonText}>Phân công giảng viên</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 export default AssignTeacher;
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#F3EEFF",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#F3EEFF",
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  scroll: {
     padding: 20,
+    paddingBottom: 40,
   },
-
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 25,
-    color: "#111827",
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+    marginTop: 12,
   },
-
   input: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginBottom: 15,
-    fontSize: 16,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: "#1A1A1A",
   },
-
   button: {
-    backgroundColor: "#4F46E5",
-    paddingVertical: 15,
-    borderRadius: 10,
+    marginTop: 28,
+    backgroundColor: "#5B5BD6",
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: "center",
-    marginTop: 10,
   },
-
   buttonText: {
     color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });
