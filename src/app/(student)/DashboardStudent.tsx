@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getStudentDashboardAPI } from "../../api/authApi";
+import HomeScreen from "../HomeScreen";
 
 const { width } = Dimensions.get("window");
 const CARD_GAP = 12;
@@ -169,6 +170,8 @@ const DashboardStudent = () => {
             <Ionicons name="notifications-outline" size={22} color="#1A1A1A" />
           </TouchableOpacity>
         </View>
+
+        <HomeScreen role="student" embedded />
 
         <View style={styles.statsGrid}>
           {cards.map((item) => (

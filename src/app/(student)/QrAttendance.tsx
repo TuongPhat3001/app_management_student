@@ -1,3 +1,4 @@
+import { attendanceByQRAPI } from "@/src/api/authApi";
 import { useAuth } from "@/src/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -17,7 +18,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-// import { markAttendanceAPI } from "@/src/api/authApi"; // bật khi có API thật
 
 const { width, height } = Dimensions.get("window");
 const SCAN_SIZE = width * 0.7;
@@ -46,31 +46,27 @@ const QrAttendance = () => {
 
       setLoading(true);
       try {
-        // ===== Gọi API điểm danh thật ở đây =====
-        // const response = await markAttendanceAPI({ qrCode: code, token });
-        // if (response.success) { ... }
+        if (!token) {
+          throw new Error("Bạn chưa đăng nhập.");
+        }
+        await attendanceByQRAPI(code.trim());
 
-        // Giả lập thành công (thay bằng API thật)
-        await new Promise((r) => setTimeout(r, 1200));
-
-        Alert.alert(
-          "Điểm danh thành công ✅",
-          `Bạn đã điểm danh buổi học "${sessionInfo.name}" thành công!`,
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                setScanned(false);
-                setManualCode("");
-                setManualVisible(false);
-              },
+        Alert.alert("Điểm danh thành công ✅", `Bạn đã điểm danh thành công!`, [
+          {
+            text: "OK",
+            onPress: () => {
+              setScanned(false);
+              setManualCode("");
+              setManualVisible(false);
             },
-          ],
-        );
+          },
+        ]);
       } catch (error: any) {
         Alert.alert(
           "Điểm danh thất bại",
-          error?.message ||
+          error?.response?.data?.message ||
+            error?.response?.data?.error ||
+            error?.message ||
             "Mã QR không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.",
           [
             {

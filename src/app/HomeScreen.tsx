@@ -7,6 +7,7 @@ type Role = "admin" | "teacher" | "student" | string;
 interface HomeScreenProps {
   role?: Role;
   userName?: string;
+  /** true = dùng làm banner trong dashboard (không full-screen) */
   embedded?: boolean;
 }
 

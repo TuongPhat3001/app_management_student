@@ -72,20 +72,6 @@ export default function StudentLayout() {
       />
 
       <Tabs.Screen
-        name="Notification"
-        options={{
-          title: "Thông báo",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "notifications" : "notifications-outline"}
-              size={24}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
         name="Profile"
         options={{
           title: "Hồ sơ",
@@ -99,6 +85,7 @@ export default function StudentLayout() {
         }}
       />
 
+      <Tabs.Screen name="Notification" options={{ href: null }} />
       <Tabs.Screen name="QrAttendance" options={{ href: null }} />
       <Tabs.Screen name="ViewTranscript" options={{ href: null }} />
       <Tabs.Screen name="Attendance" options={{ href: null }} />

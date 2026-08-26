@@ -84,6 +84,8 @@ export default function TeacherLayout() {
         }}
       />
 
+      {/* Thông báo: không hiện trên tab bar — mở bằng nút chuông */}
+      <Tabs.Screen name="Notification" options={{ href: null }} />
       <Tabs.Screen name="class-offers" options={{ href: null }} />
       <Tabs.Screen name="page" options={{ href: null }} />
     </Tabs>

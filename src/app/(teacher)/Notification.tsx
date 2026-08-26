@@ -15,6 +15,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+/**
+ * GET /notifications — khớp backend models.Notification
+ * Subject, Content, Status, Channel, CreatedAt, SentAt
+ */
+
 interface NotificationItem {
   id: string;
   subject: string;

@@ -7,6 +7,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -19,7 +20,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type Mode = "choose" | "reject";
+/**
+ * POST /class-offers/:id/accept
+ * POST /class-offers/:id/reject  { note }
+ */
+
+type Mode = "choose" | "reject" | "success";
+type SuccessKind = "accepted" | "rejected";
 
 const QUICK_REASONS = [
   "Trùng lịch giảng dạy",
@@ -34,18 +41,23 @@ const RespondClassOffer = () => {
   const [mode, setMode] = useState<Mode>("choose");
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
+  const [successKind, setSuccessKind] = useState<SuccessKind>("accepted");
 
-  const handleAccept = async () => {
+  // Modal xác nhận
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [confirmType, setConfirmType] = useState<"accept" | "reject">("accept");
+
+  const doAccept = async () => {
     if (!id) {
       Alert.alert("Lỗi", "Không tìm thấy mã phân công.");
       return;
     }
+    setConfirmVisible(false);
     setLoading(true);
     try {
       await apiClient.post(`/class-offers/${id}/accept`);
-      Alert.alert("Thành công", "Đã chấp nhận phân công lớp học!", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      setSuccessKind("accepted");
+      setMode("success");
     } catch (err: any) {
       Alert.alert(
         "Lỗi",
@@ -58,7 +70,7 @@ const RespondClassOffer = () => {
     }
   };
 
-  const handleReject = async () => {
+  const doReject = async () => {
     if (!reason.trim()) {
       Alert.alert(
         "Thiếu thông tin",
@@ -70,14 +82,15 @@ const RespondClassOffer = () => {
       Alert.alert("Lỗi", "Không tìm thấy mã phân công.");
       return;
     }
+    setConfirmVisible(false);
     setLoading(true);
     try {
+      // Backend: ClassOfferResponseRequest { note }
       await apiClient.post(`/class-offers/${id}/reject`, {
-        reason: reason.trim(),
+        note: reason.trim(),
       });
-      Alert.alert("Hoàn tất", "Đã gửi phản hồi từ chối nhận lớp.", [
-        { text: "Đóng", onPress: () => router.back() },
-      ]);
+      setSuccessKind("rejected");
+      setMode("success");
     } catch (err: any) {
       Alert.alert(
         "Lỗi",
@@ -90,8 +103,63 @@ const RespondClassOffer = () => {
     }
   };
 
+  const openConfirmAccept = () => {
+    setConfirmType("accept");
+    setConfirmVisible(true);
+  };
+
+  const openConfirmReject = () => {
+    if (!reason.trim()) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập hoặc chọn lý do từ chối.");
+      return;
+    }
+    setConfirmType("reject");
+    setConfirmVisible(true);
+  };
+
+  // —— Màn thành công ——
+  if (mode === "success") {
+    const ok = successKind === "accepted";
+    return (
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
+        <View style={styles.successWrap}>
+          <View
+            style={[
+              styles.successIcon,
+              { backgroundColor: ok ? "#D1FAE5" : "#FEE2E2" },
+            ]}>
+            <Ionicons
+              name={ok ? "checkmark-circle" : "close-circle"}
+              size={64}
+              color={ok ? "#059669" : "#DC2626"}
+            />
+          </View>
+          <Text style={styles.successTitle}>
+            {ok ? "Đã nhận lớp" : "Đã từ chối"}
+          </Text>
+          <Text style={styles.successDesc}>
+            {ok
+              ? "Bạn đã chấp nhận phân công. Lớp sẽ được gán vào danh sách phụ trách của bạn."
+              : "Phản hồi từ chối đã được gửi về giáo vụ. Họ sẽ phân công giảng viên khác."}
+          </Text>
+          {id ? <Text style={styles.successId}>Mã phân công #{id}</Text> : null}
+          <TouchableOpacity
+            style={[
+              styles.successBtn,
+              { backgroundColor: ok ? "#5B5BD6" : "#6B7280" },
+            ]}
+            onPress={() => router.back()}
+            activeOpacity={0.85}>
+            <Text style={styles.successBtnText}>Về danh sách đề xuất</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
 
       <View style={styles.header}>
@@ -123,7 +191,6 @@ const RespondClassOffer = () => {
               </View>
             ) : null}
 
-            {/* ===== CHỌN: Nhận hoặc Từ chối ===== */}
             {mode === "choose" ? (
               <View style={styles.chooseBlock}>
                 <View style={styles.iconWrap}>
@@ -145,7 +212,7 @@ const RespondClassOffer = () => {
                   <View style={styles.actions}>
                     <TouchableOpacity
                       style={styles.acceptBtn}
-                      onPress={handleAccept}
+                      onPress={openConfirmAccept}
                       activeOpacity={0.85}>
                       <Ionicons name="checkmark" size={20} color="#FFFFFF" />
                       <Text style={styles.acceptText}>Đồng ý nhận lớp</Text>
@@ -221,7 +288,7 @@ const RespondClassOffer = () => {
                   <View style={styles.actions}>
                     <TouchableOpacity
                       style={styles.rejectBtn}
-                      onPress={handleReject}
+                      onPress={openConfirmReject}
                       activeOpacity={0.85}>
                       <Ionicons name="close-circle" size={20} color="#FFFFFF" />
                       <Text style={styles.rejectText}>Xác nhận từ chối</Text>
@@ -239,6 +306,71 @@ const RespondClassOffer = () => {
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      {/* Modal xác nhận */}
+      <Modal
+        visible={confirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmVisible(false)}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View
+              style={[
+                styles.confirmIconWrap,
+                {
+                  backgroundColor:
+                    confirmType === "accept" ? "#EDE9FE" : "#FEE2E2",
+                },
+              ]}>
+              <Ionicons
+                name={confirmType === "accept" ? "checkmark-circle" : "warning"}
+                size={40}
+                color={confirmType === "accept" ? "#5B5BD6" : "#DC2626"}
+              />
+            </View>
+            <Text style={styles.confirmTitle}>
+              {confirmType === "accept"
+                ? "Xác nhận nhận lớp?"
+                : "Xác nhận từ chối?"}
+            </Text>
+            <Text style={styles.confirmDesc}>
+              {confirmType === "accept"
+                ? `Bạn sẽ trở thành giảng viên phụ trách phân công #${id}. Không thể hoàn tác dễ dàng.`
+                : `Bạn sẽ từ chối phân công #${id}.${
+                    reason ? `\nLý do: ${reason}` : ""
+                  }`}
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.confirmCancel}
+                onPress={() => setConfirmVisible(false)}
+                disabled={loading}>
+                <Text style={styles.confirmCancelText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmOk,
+                  {
+                    backgroundColor:
+                      confirmType === "accept" ? "#5B5BD6" : "#DC2626",
+                  },
+                ]}
+                onPress={confirmType === "accept" ? doAccept : doReject}
+                disabled={loading}
+                activeOpacity={0.85}>
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.confirmOkText}>
+                    {confirmType === "accept" ? "Đồng ý nhận" : "Từ chối"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -392,4 +524,102 @@ const styles = StyleSheet.create({
     minHeight: 120,
     marginBottom: 24,
   },
+
+  // Confirm modal
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  confirmCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+  },
+  confirmIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  confirmDesc: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 22,
+  },
+  confirmActions: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  confirmCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+  },
+  confirmCancelText: { fontSize: 15, fontWeight: "600", color: "#6B7280" },
+  confirmOk: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  confirmOkText: { fontSize: 15, fontWeight: "700", color: "#FFF" },
+
+  // Success
+  successWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  successIcon: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1A1A1A",
+    marginBottom: 10,
+  },
+  successDesc: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 21,
+    marginBottom: 12,
+  },
+  successId: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    marginBottom: 28,
+  },
+  successBtn: {
+    paddingVertical: 16,
+    paddingHorizontal: 28,
+    borderRadius: 14,
+    minWidth: 220,
+    alignItems: "center",
+  },
+  successBtnText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
 });

@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -128,7 +129,16 @@ const DashboardTeacher = () => {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }>
       <View style={styles.header}>
-        <Text style={styles.name}>Giảng viên</Text>
+        <View>
+          <Text style={styles.greeting}>Dashboard</Text>
+          <Text style={styles.name}>Giảng viên</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.bellBtn}
+          onPress={() => router.push("/(teacher)/Notification" as any)}
+          activeOpacity={0.8}>
+          <Ionicons name="notifications-outline" size={22} color="#1A1A1A" />
+        </TouchableOpacity>
       </View>
 
       <HomeScreen role="teacher" embedded />
@@ -176,13 +186,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#f8fafc",
   },
-  header: { marginBottom: 20 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
   greeting: { fontSize: 15, color: "#64748b" },
   name: {
     fontSize: 26,
     fontWeight: "800",
     color: "#0f172a",
     marginTop: 2,
+  },
+  bellBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   statsGrid: {
     flexDirection: "row",

@@ -2,14 +2,11 @@ import { logoutAPI } from "@/src/api/authApi";
 import apiClient from "@/src/api/axios";
 import { useAuth } from "@/src/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -158,27 +155,7 @@ const DashboardAdmin = () => {
           } catch {
             // vẫn xóa local
           }
-          try {
-            if (Platform.OS === "web") {
-              await AsyncStorage.multiRemove([
-                "jwt_token",
-                "role",
-                "authToken",
-                "userData",
-              ]);
-            } else {
-              await SecureStore.deleteItemAsync("jwt_token");
-              await SecureStore.deleteItemAsync("role");
-              await AsyncStorage.multiRemove(["authToken", "userData"]);
-            }
-          } catch {
-            // ignore
-          }
-          try {
-            await logout();
-          } catch {
-            // ignore
-          }
+          await logout();
           router.replace("/(auth)/login");
         },
       },
@@ -206,9 +183,11 @@ const DashboardAdmin = () => {
           <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
             <Ionicons name="refresh" size={20} color="#5B5BD6" />
           </TouchableOpacity>
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.logoutHeaderBtn}
-            onPress={handleLogout}></TouchableOpacity>
+            onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+          </TouchableOpacity> */}
         </View>
       </View>
 

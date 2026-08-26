@@ -17,10 +17,14 @@ const Profile = () => {
   const { user, logout } = useAuth();
   const router = useRouter();
 
-  // fallback profile when auth user is not available
-  const profile = user ?? {
-    name: "Trương Tường Phát",
-    studentId: "20260101",
+  const profile = {
+    name: user?.fullName || user?.name || user?.username || "Sinh viên",
+    studentId:
+      user?.studentCode ||
+      user?.studentId ||
+      user?.email ||
+      user?.username ||
+      "SV",
     avatar: null as string | null,
   };
 
@@ -30,9 +34,9 @@ const Profile = () => {
       {
         text: "Đăng xuất",
         style: "destructive",
-        onPress: () => {
-          logout();
-          router.replace("/login");
+        onPress: async () => {
+          await logout();
+          router.replace("/(auth)/login");
         },
       },
     ]);
@@ -49,7 +53,7 @@ const Profile = () => {
       id: "password",
       icon: "lock-closed-outline" as const,
       label: "Đổi mật khẩu",
-      onPress: () => {},
+      onPress: () => router.push("/(auth)/ChangePassword"),
     },
     {
       id: "settings",

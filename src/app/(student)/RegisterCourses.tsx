@@ -118,13 +118,55 @@ const RegisterCourses: React.FC = () => {
     useState<Course[]>(MOCK_REGISTERED);
   const [loading, setLoading] = useState(false);
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setLoading(true);
-    setTimeout(() => {
-      setCourses(MOCK_COURSES);
-      setLoading(false);
+    try {
+      const { getOpenCourseClassesAPI } = await import("@/src/api/authApi");
+      const res = await getOpenCourseClassesAPI();
+      const raw = res.data?.data ?? res.data ?? [];
+      const list = Array.isArray(raw) ? raw : [];
+      if (list.length > 0) {
+        const mapped: Course[] = list.map((item: any, idx: number) => ({
+          id: Number(item.id ?? item.ID ?? idx + 1),
+          name:
+            item.courseName ||
+            item.course?.name ||
+            item.className ||
+            item.name ||
+            "Học phần",
+          code:
+            item.classCode ||
+            item.courseCode ||
+            item.code ||
+            `HP-${item.id ?? idx + 1}`,
+          credits: Number(item.credits ?? item.course?.credits ?? 3),
+          teacher:
+            item.teacherName ||
+            item.teacher?.fullName ||
+            item.teacher?.name ||
+            "—",
+          schedule: item.schedule || item.dayOfWeek || undefined,
+          time:
+            item.startTime && item.endTime
+              ? `${item.startTime} - ${item.endTime}`
+              : item.time,
+          room: item.room || item.roomName || undefined,
+          slots:
+            item.capacity != null
+              ? `${item.enrolled ?? item.registered ?? 0}/${item.capacity}`
+              : "—",
+        }));
+        setCourses(mapped);
+      } else {
+        setCourses(MOCK_COURSES);
+      }
       setStep("list");
-    }, 600);
+    } catch {
+      setCourses(MOCK_COURSES);
+      setStep("list");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSelectCourse = (course: Course) => {
@@ -136,15 +178,19 @@ const RegisterCourses: React.FC = () => {
     if (!selectedCourse) return;
     setLoading(true);
     try {
-      // await axios.post("/course-registrations", { courseClassId: selectedCourse.id });
-      await new Promise((r) => setTimeout(r, 1000));
+      const { registerCourseAPI } = await import("@/src/api/authApi");
+      await registerCourseAPI(selectedCourse.id);
       setRegisteredCourses((prev) => [
         ...prev,
         { ...selectedCourse, registered: true },
       ]);
       setStep("success");
-    } catch {
-      Alert.alert("Lỗi", "Đăng ký thất bại. Vui lòng thử lại.");
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        "Đăng ký thất bại. Vui lòng thử lại.";
+      Alert.alert("Lỗi", String(msg));
     } finally {
       setLoading(false);
     }

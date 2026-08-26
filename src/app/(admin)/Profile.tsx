@@ -1,13 +1,10 @@
 import { logoutAPI } from "@/src/api/authApi";
 import { useAuth } from "@/src/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import {
   Alert,
-  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -20,61 +17,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const Profile = () => {
   const { user, logout } = useAuth();
   const router = useRouter();
-  const [displayName, setDisplayName] = useState("Admin");
-  const [displayId, setDisplayId] = useState("ADMIN");
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const name =
-          user?.fullName ||
-          user?.name ||
-          user?.username ||
-          (await AsyncStorage.getItem("userName")) ||
-          "Admin Hệ thống";
-        const code =
-          user?.adminCode ||
-          user?.email ||
-          user?.username ||
-          (await AsyncStorage.getItem("role")) ||
-          "admin";
-        setDisplayName(String(name));
-        setDisplayId(String(code));
-      } catch {
-        // keep defaults
-      }
-    };
-    load();
-  }, [user]);
-
-  const clearSession = async () => {
-    try {
-      await logoutAPI();
-    } catch {
-      // vẫn xóa local
-    }
-    if (Platform.OS === "web") {
-      await AsyncStorage.multiRemove([
-        "jwt_token",
-        "role",
-        "authToken",
-        "userData",
-      ]);
-    } else {
-      try {
-        await SecureStore.deleteItemAsync("jwt_token");
-        await SecureStore.deleteItemAsync("role");
-      } catch {
-        // ignore
-      }
-      await AsyncStorage.multiRemove(["authToken", "userData"]);
-    }
-    try {
-      await logout();
-    } catch {
-      // ignore
-    }
-  };
+  const displayName = useMemo(
+    () => user?.fullName || user?.name || user?.username || "Admin Hệ thống",
+    [user],
+  );
+  const displayId = useMemo(
+    () => user?.email || user?.username || user?.adminCode || "admin",
+    [user],
+  );
 
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn có chắc muốn đăng xuất?", [
@@ -83,7 +34,12 @@ const Profile = () => {
         text: "Đăng xuất",
         style: "destructive",
         onPress: async () => {
-          await clearSession();
+          try {
+            await logoutAPI();
+          } catch {
+            // ignore
+          }
+          await logout();
           router.replace("/(auth)/login");
         },
       },
@@ -122,7 +78,6 @@ const Profile = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
-
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Hồ sơ</Text>
       </View>
@@ -135,11 +90,7 @@ const Profile = () => {
             <View style={styles.avatar}>
               <Ionicons name="shield-checkmark" size={44} color="#9CA3AF" />
             </View>
-            <TouchableOpacity style={styles.cameraBtn} activeOpacity={0.8}>
-              <Ionicons name="camera" size={14} color="#FFFFFF" />
-            </TouchableOpacity>
           </View>
-
           <Text style={styles.userName}>{displayName}</Text>
           <Text style={styles.userId}>{displayId}</Text>
           <View style={styles.roleBadge}>
@@ -209,19 +160,6 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: "#FFFFFF",
   },
-  cameraBtn: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#5B5BD6",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-  },
   userName: {
     fontSize: 20,
     fontWeight: "700",
@@ -274,11 +212,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     marginTop: 16,
     gap: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
   },
   logoutText: { fontSize: 15, fontWeight: "600", color: "#EF4444" },
 });

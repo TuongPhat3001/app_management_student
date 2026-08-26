@@ -1,7 +1,6 @@
 import apiClient from "@/src/api/axios";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -29,64 +28,115 @@ interface CourseItem {
   description?: string;
 }
 
-const MOCK_COURSES: CourseItem[] = [
-  {
-    id: 1,
-    courseCode: "CSDL202",
-    courseName: "Database Systems",
-    credits: 3,
-    department: "Công nghệ thông tin",
-    description: "Hệ quản trị cơ sở dữ liệu",
-  },
-  {
-    id: 2,
-    courseCode: "WEB205",
-    courseName: "Web Development",
-    credits: 3,
-    department: "Công nghệ thông tin",
-    description: "Phát triển ứng dụng web",
-  },
-  {
-    id: 3,
-    courseCode: "SE101",
-    courseName: "Software Engineering",
-    credits: 3,
-    department: "Kỹ thuật phần mềm",
-    description: "Công nghệ phần mềm",
-  },
-  {
-    id: 4,
-    courseCode: "MATH201",
-    courseName: "Discrete Mathematics",
-    credits: 3,
-    department: "Toán ứng dụng",
-    description: "Toán rời rạc",
-  },
-];
+type FormState = {
+  courseCode: string;
+  courseName: string;
+  credits: string;
+  department: string;
+  description: string;
+};
+
+const emptyForm: FormState = {
+  courseCode: "",
+  courseName: "",
+  credits: "",
+  department: "",
+  description: "",
+};
+
+const normalizeCourse = (raw: any): CourseItem | null => {
+  const id = Number(raw?.id ?? raw?.ID ?? raw?.Id);
+  if (!id || Number.isNaN(id)) return null;
+
+  const courseCode = String(
+    raw?.courseCode ??
+      raw?.CourseCode ??
+      raw?.code ??
+      raw?.Code ??
+      raw?.course_code ??
+      "",
+  ).trim();
+
+  const courseName = String(
+    raw?.courseName ??
+      raw?.CourseName ??
+      raw?.name ??
+      raw?.Name ??
+      raw?.course_name ??
+      "",
+  ).trim();
+
+  const credits = Number(
+    raw?.credits ?? raw?.Credits ?? raw?.credit ?? raw?.Credit ?? 0,
+  );
+
+  const department =
+    raw?.department ??
+    raw?.Department ??
+    raw?.faculty ??
+    raw?.Faculty ??
+    raw?.majorName ??
+    undefined;
+
+  const description =
+    raw?.description ?? raw?.Description ?? raw?.desc ?? undefined;
+
+  return {
+    id,
+    courseCode: courseCode || `MH-${id}`,
+    courseName: courseName || "Chưa đặt tên",
+    credits: Number.isFinite(credits) && credits > 0 ? credits : 0,
+    department: department ? String(department) : undefined,
+    description: description ? String(description) : undefined,
+  };
+};
+
+const extractError = (error: any, fallback: string) => {
+  const data = error?.response?.data;
+  if (!error?.response) {
+    return "Không kết nối được server. Kiểm tra mạng / IP backend.";
+  }
+  if (error.response.status === 401 || error.response.status === 403) {
+    return "Bạn chưa đăng nhập hoặc không có quyền admin.";
+  }
+  if (typeof data?.message === "string") return data.message;
+  if (typeof data?.error === "string") return data.error;
+  if (Array.isArray(data?.message)) return data.message.join("\n");
+  return fallback;
+};
 
 const Courses = () => {
-  const router = useRouter();
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<CourseItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
-    courseCode: "",
-    courseName: "",
-    credits: "",
-    department: "",
-    description: "",
-  });
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchCourses = useCallback(async () => {
     try {
+      setFetchError(null);
       const res = await apiClient.get("/courses");
-      const data = res.data?.data || res.data || [];
-      setCourses(Array.isArray(data) ? data : []);
-    } catch {
-      setCourses(MOCK_COURSES);
+      const raw = res.data?.data ?? res.data ?? [];
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.items)
+          ? raw.items
+          : Array.isArray(raw?.courses)
+            ? raw.courses
+            : [];
+
+      const normalized = list
+        .map(normalizeCourse)
+        .filter((c: CourseItem | null): c is CourseItem => c !== null);
+
+      setCourses(normalized);
+    } catch (error: any) {
+      setFetchError(extractError(error, "Không tải được danh sách môn học."));
+      setCourses([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -102,60 +152,109 @@ const Courses = () => {
     fetchCourses();
   };
 
-  const filtered = courses.filter((c) => {
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      c.courseName?.toLowerCase().includes(q) ||
-      c.courseCode?.toLowerCase().includes(q) ||
-      c.department?.toLowerCase().includes(q)
+    if (!q) return courses;
+    return courses.filter(
+      (c) =>
+        c.courseName.toLowerCase().includes(q) ||
+        c.courseCode.toLowerCase().includes(q) ||
+        (c.department || "").toLowerCase().includes(q),
     );
-  });
+  }, [courses, search]);
 
-  const resetForm = () => {
-    setForm({
-      courseCode: "",
-      courseName: "",
-      credits: "",
-      department: "",
-      description: "",
-    });
+  const openCreate = () => {
+    setEditing(null);
+    setForm(emptyForm);
+    setShowModal(true);
   };
 
-  const handleCreate = async () => {
-    if (
-      !form.courseCode.trim() ||
-      !form.courseName.trim() ||
-      !form.credits.trim()
-    ) {
-      Alert.alert("Thông báo", "Vui lòng nhập mã môn, tên môn và số tín chỉ.");
-      return;
-    }
+  const openEdit = (course: CourseItem) => {
+    setEditing(course);
+    setForm({
+      courseCode: course.courseCode,
+      courseName: course.courseName,
+      credits: course.credits ? String(course.credits) : "",
+      department: course.department || "",
+      description: course.description || "",
+    });
+    setShowModal(true);
+  };
 
-    const creditsNum = Number(form.credits);
-    if (isNaN(creditsNum) || creditsNum <= 0) {
-      Alert.alert("Thông báo", "Số tín chỉ phải là số dương.");
-      return;
+  const closeModal = () => {
+    setShowModal(false);
+    setEditing(null);
+    setForm(emptyForm);
+  };
+
+  const setField = <K extends keyof FormState>(key: K, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const validate = () => {
+    if (!form.courseCode.trim()) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập mã môn học.");
+      return false;
     }
+    if (!form.courseName.trim()) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập tên môn học.");
+      return false;
+    }
+    const creditsNum = Number(form.credits);
+    if (!form.credits.trim() || isNaN(creditsNum) || creditsNum <= 0) {
+      Alert.alert("Sai định dạng", "Số tín chỉ phải là số dương.");
+      return false;
+    }
+    return true;
+  };
+
+  const buildPayload = () => {
+    const creditsNum = Number(form.credits);
+    const payload: Record<string, any> = {
+      courseCode: form.courseCode.trim(),
+      courseName: form.courseName.trim(),
+      credits: creditsNum,
+      code: form.courseCode.trim(),
+      name: form.courseName.trim(),
+      CourseCode: form.courseCode.trim(),
+      CourseName: form.courseName.trim(),
+      Credits: creditsNum,
+    };
+    if (form.department.trim()) {
+      payload.department = form.department.trim();
+      payload.Department = form.department.trim();
+    }
+    if (form.description.trim()) {
+      payload.description = form.description.trim();
+      payload.Description = form.description.trim();
+    }
+    return payload;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
 
     setSubmitting(true);
     try {
-      await apiClient.post("/courses", {
-        courseCode: form.courseCode.trim(),
-        courseName: form.courseName.trim(),
-        credits: creditsNum,
-        department: form.department.trim() || null,
-        description: form.description.trim() || null,
-      });
+      const payload = buildPayload();
 
-      Alert.alert("Thành công", "Tạo môn học thành công!");
-      setShowCreate(false);
-      resetForm();
+      if (editing) {
+        await apiClient.put(`/courses/${editing.id}`, payload);
+        Alert.alert("Thành công", "Cập nhật môn học thành công!");
+      } else {
+        await apiClient.post("/courses", payload);
+        Alert.alert("Thành công", "Tạo môn học thành công!");
+      }
+
+      closeModal();
       fetchCourses();
     } catch (error: any) {
       Alert.alert(
         "Lỗi",
-        error?.response?.data?.message || "Không thể tạo môn học.",
+        extractError(
+          error,
+          editing ? "Không thể cập nhật môn học." : "Không thể tạo môn học.",
+        ),
       );
     } finally {
       setSubmitting(false);
@@ -163,25 +262,26 @@ const Courses = () => {
   };
 
   const handleDelete = (course: CourseItem) => {
-    Alert.alert("Xóa môn học", `Bạn có chắc muốn xóa "${course.courseName}"?`, [
-      { text: "Hủy", style: "cancel" },
-      {
-        text: "Xóa",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await apiClient.delete(`/courses/${course.id}`);
-            setCourses((prev) => prev.filter((c) => c.id !== course.id));
-            Alert.alert("Thành công", "Đã xóa môn học.");
-          } catch (error: any) {
-            Alert.alert(
-              "Lỗi",
-              error?.response?.data?.message || "Không thể xóa môn học.",
-            );
-          }
+    Alert.alert(
+      "Xóa môn học",
+      `Bạn có chắc muốn xóa "${course.courseName}" (${course.courseCode})?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await apiClient.delete(`/courses/${course.id}`);
+              setCourses((prev) => prev.filter((c) => c.id !== course.id));
+              Alert.alert("Thành công", "Đã xóa môn học.");
+            } catch (error: any) {
+              Alert.alert("Lỗi", extractError(error, "Không thể xóa môn học."));
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const renderItem = ({ item }: { item: CourseItem }) => (
@@ -191,7 +291,9 @@ const Courses = () => {
           <Text style={styles.codeText}>{item.courseCode}</Text>
         </View>
         <View style={styles.creditBadge}>
-          <Text style={styles.creditText}>{item.credits} TC</Text>
+          <Text style={styles.creditText}>
+            {item.credits > 0 ? `${item.credits} TC` : "— TC"}
+          </Text>
         </View>
       </View>
 
@@ -212,6 +314,13 @@ const Courses = () => {
 
       <View style={styles.cardActions}>
         <TouchableOpacity
+          style={styles.editAction}
+          onPress={() => openEdit(item)}
+          activeOpacity={0.7}>
+          <Ionicons name="create-outline" size={16} color="#5B5BD6" />
+          <Text style={styles.editActionText}>Sửa</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={styles.deleteAction}
           onPress={() => handleDelete(item)}
           activeOpacity={0.7}>
@@ -223,24 +332,19 @@ const Courses = () => {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
 
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Quản lý môn học</Text>
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => setShowCreate(true)}
+          onPress={openCreate}
           activeOpacity={0.8}>
           <Ionicons name="add" size={22} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {/* Search */}
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={18} color="#9CA3AF" />
         <TextInput
@@ -257,7 +361,21 @@ const Courses = () => {
         )}
       </View>
 
-      <Text style={styles.countText}>{filtered.length} môn học</Text>
+      <View style={styles.countRow}>
+        <Text style={styles.countText}>{filtered.length} môn học</Text>
+        {fetchError ? (
+          <TouchableOpacity onPress={onRefresh}>
+            <Text style={styles.retryText}>Thử lại</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {fetchError ? (
+        <View style={styles.errorBanner}>
+          <Ionicons name="warning-outline" size={16} color="#B45309" />
+          <Text style={styles.errorBannerText}>{fetchError}</Text>
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.center}>
@@ -281,28 +399,49 @@ const Courses = () => {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="book-outline" size={56} color="#D1D5DB" />
-              <Text style={styles.emptyText}>Chưa có môn học nào</Text>
+              <Text style={styles.emptyText}>
+                {fetchError
+                  ? "Không tải được dữ liệu từ server"
+                  : search
+                    ? "Không tìm thấy môn học phù hợp"
+                    : "Chưa có môn học nào"}
+              </Text>
+              {!fetchError && !search ? (
+                <TouchableOpacity style={styles.emptyBtn} onPress={openCreate}>
+                  <Text style={styles.emptyBtnText}>
+                    + Tạo môn học đầu tiên
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           }
         />
       )}
 
-      {/* Modal tạo môn học */}
-      <Modal visible={showCreate} transparent animationType="slide">
+      <Modal visible={showModal} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Tạo môn học mới</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {editing ? "Sửa môn học" : "Tạo môn học mới"}
+              </Text>
+              <TouchableOpacity onPress={closeModal} hitSlop={12}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
 
-            <ScrollView keyboardShouldPersistTaps="handled">
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}>
               <Text style={styles.inputLabel}>Mã môn học *</Text>
               <TextInput
                 style={styles.input}
                 placeholder="VD: CSDL202"
                 placeholderTextColor="#9CA3AF"
                 value={form.courseCode}
-                onChangeText={(t) => setForm((p) => ({ ...p, courseCode: t }))}
+                onChangeText={(t) => setField("courseCode", t)}
                 autoCapitalize="characters"
               />
 
@@ -312,7 +451,7 @@ const Courses = () => {
                 placeholder="VD: Database Systems"
                 placeholderTextColor="#9CA3AF"
                 value={form.courseName}
-                onChangeText={(t) => setForm((p) => ({ ...p, courseName: t }))}
+                onChangeText={(t) => setField("courseName", t)}
               />
 
               <Text style={styles.inputLabel}>Số tín chỉ *</Text>
@@ -322,7 +461,7 @@ const Courses = () => {
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric"
                 value={form.credits}
-                onChangeText={(t) => setForm((p) => ({ ...p, credits: t }))}
+                onChangeText={(t) => setField("credits", t)}
               />
 
               <Text style={styles.inputLabel}>Khoa / Bộ môn</Text>
@@ -331,7 +470,7 @@ const Courses = () => {
                 placeholder="VD: Công nghệ thông tin"
                 placeholderTextColor="#9CA3AF"
                 value={form.department}
-                onChangeText={(t) => setForm((p) => ({ ...p, department: t }))}
+                onChangeText={(t) => setField("department", t)}
               />
 
               <Text style={styles.inputLabel}>Mô tả</Text>
@@ -340,7 +479,7 @@ const Courses = () => {
                 placeholder="Mô tả ngắn về môn học..."
                 placeholderTextColor="#9CA3AF"
                 value={form.description}
-                onChangeText={(t) => setForm((p) => ({ ...p, description: t }))}
+                onChangeText={(t) => setField("description", t)}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
@@ -348,22 +487,19 @@ const Courses = () => {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => {
-                  setShowCreate(false);
-                  resetForm();
-                }}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={closeModal}>
                 <Text style={styles.cancelText}>Hủy</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.saveBtn, submitting && { opacity: 0.7 }]}
-                onPress={handleCreate}
+                onPress={handleSubmit}
                 disabled={submitting}>
                 {submitting ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.saveText}>Tạo môn học</Text>
+                  <Text style={styles.saveText}>
+                    {editing ? "Lưu thay đổi" : "Tạo môn học"}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -381,18 +517,16 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
     paddingVertical: 14,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  backBtn: { width: 40, height: 40, justifyContent: "center" },
   headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
     color: "#1A1A1A",
   },
   addBtn: {
@@ -417,12 +551,27 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchInput: { flex: 1, fontSize: 14, color: "#1A1A1A" },
-  countText: {
-    fontSize: 13,
-    color: "#6B7280",
+  countRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
+  countText: { fontSize: 13, color: "#6B7280" },
+  retryText: { fontSize: 13, fontWeight: "600", color: "#5B5BD6" },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  errorBannerText: { flex: 1, fontSize: 12, color: "#92400E", lineHeight: 16 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   list: { paddingHorizontal: 16, paddingBottom: 32 },
   card: {
@@ -448,22 +597,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  codeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#5B5BD6",
-  },
+  codeText: { fontSize: 12, fontWeight: "700", color: "#5B5BD6" },
   creditBadge: {
     backgroundColor: "#F3F4F6",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  creditText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6B7280",
-  },
+  creditText: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
   courseName: {
     fontSize: 16,
     fontWeight: "700",
@@ -488,21 +629,29 @@ const styles = StyleSheet.create({
     borderTopColor: "#F3F4F6",
     marginTop: 12,
     paddingTop: 10,
-  },
-  deleteAction: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    gap: 20,
   },
-  deleteActionText: {
-    fontSize: 13,
-    color: "#EF4444",
-    fontWeight: "600",
+  editAction: { flexDirection: "row", alignItems: "center", gap: 4 },
+  editActionText: { fontSize: 13, color: "#5B5BD6", fontWeight: "600" },
+  deleteAction: { flexDirection: "row", alignItems: "center", gap: 4 },
+  deleteActionText: { fontSize: 13, color: "#EF4444", fontWeight: "600" },
+  empty: { alignItems: "center", paddingTop: 60, paddingHorizontal: 24 },
+  emptyText: {
+    fontSize: 15,
+    color: "#9CA3AF",
+    marginTop: 10,
+    textAlign: "center",
   },
-  empty: { alignItems: "center", paddingTop: 60 },
-  emptyText: { fontSize: 15, color: "#9CA3AF", marginTop: 10 },
+  emptyBtn: {
+    marginTop: 16,
+    backgroundColor: "#5B5BD6",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
 
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -513,16 +662,20 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
-    paddingTop: 24,
+    paddingTop: 16,
     paddingBottom: 36,
     maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#1A1A1A",
-    textAlign: "center",
-    marginBottom: 18,
   },
   inputLabel: {
     fontSize: 13,
@@ -539,15 +692,8 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
     marginBottom: 14,
   },
-  textArea: {
-    height: 80,
-    paddingTop: 12,
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-  },
+  textArea: { height: 80, paddingTop: 12 },
+  modalActions: { flexDirection: "row", gap: 12, marginTop: 8 },
   cancelBtn: {
     flex: 1,
     paddingVertical: 14,
@@ -555,11 +701,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     alignItems: "center",
   },
-  cancelText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#6B7280",
-  },
+  cancelText: { fontSize: 15, fontWeight: "600", color: "#6B7280" },
   saveBtn: {
     flex: 1,
     paddingVertical: 14,
@@ -567,9 +709,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#5B5BD6",
     alignItems: "center",
   },
-  saveText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
+  saveText: { fontSize: 15, fontWeight: "600", color: "#FFFFFF" },
 });

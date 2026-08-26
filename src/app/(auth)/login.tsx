@@ -111,7 +111,7 @@ const LoginScreen = () => {
       style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.welcomeText}>Xin Chào!!!! 👋</Text>
+          <Text style={styles.welcomeText}>Xin Chào!!!!</Text>
           <Text style={styles.subtitle}>Hệ thống quản lý sinh viên</Text>
         </View>
 
