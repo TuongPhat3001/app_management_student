@@ -19,13 +19,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/**
- * Đồng bộ backend:
- * POST /class-offers  { classId, teacherId, message }
- * Sau khi tạo offer → POST /notifications/email tới UserID của GV
- * GV xem tại GET /class-offers + chuông thông báo
- */
-
 type ClassItem = {
   id: number;
   classCode: string;
@@ -33,8 +26,8 @@ type ClassItem = {
 };
 
 type TeacherItem = {
-  id: number; // teacher.id (ClassOffer.TeacherID)
-  userId?: number; // users.id — dùng gửi notification
+  id: number;
+  userId?: number;
   name: string;
   email?: string;
   code?: string;
@@ -141,15 +134,13 @@ const AssignTeacher: React.FC = () => {
     const payload: Record<string, any> = {
       subject,
       content,
-      sendNow: false, // lưu inbox; không phụ thuộc SMTP
+      sendNow: false,
     };
     if (teacher.userId) payload.recipientUserId = teacher.userId;
     if (teacher.email) payload.recipientEmail = teacher.email;
     try {
       await apiClient.post("/notifications/email", payload);
-    } catch {
-      // offer đã tạo thành công — thông báo phụ, không chặn
-    }
+    } catch {}
   };
 
   const handleSubmit = async () => {
@@ -164,14 +155,19 @@ const AssignTeacher: React.FC = () => {
 
     setLoading(true);
     try {
-      // 1) Tạo đề xuất lớp — backend CreateClassOffer
+      // Backend CreateClassOfferRequest: classId, teacherId, title*, content*, message?
+      const title = `Phân công lớp ${selectedClass.classCode}`;
+      const content =
+        message.trim() ||
+        `Mời giảng viên phụ trách lớp ${selectedClass.classCode}. Vui lòng phản hồi trên app.`;
       await apiClient.post("/class-offers", {
         classId: selectedClass.id,
         teacherId: selectedTeacher.id,
-        message: message.trim(),
+        title,
+        content,
+        message: content,
       });
 
-      // 2) Gửi thông báo tới GV (recipientUserId = User.ID)
       await sendOfferNotification(selectedTeacher, selectedClass, message);
 
       Alert.alert(

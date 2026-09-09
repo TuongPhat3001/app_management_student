@@ -135,7 +135,7 @@ const QrAttendance = () => {
 
       {/* Camera */}
       <CameraView
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         facing="back"
         barcodeScannerSettings={{
           barcodeTypes: ["qr"],
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
 
   // Overlay
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "space-between",
   },
 
