@@ -52,8 +52,8 @@ export const getOpenCourseClassesAPI = () => {
   return api.get("/course-classes/open");
 };
 
-export const registerCourseAPI = (courseClassId: number) => {
-  return api.post("/course-registrations", { courseClassId });
+export const registerCourseAPI = (courseId: number, classId: number) => {
+  return api.post("/course-registrations", { courseId, classId });
 };
 
 export const getMyCourseRegistrationsAPI = () => {

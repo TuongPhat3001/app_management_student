@@ -1,12 +1,18 @@
-import { attendanceByQRAPI } from "@/src/api/authApi";
+import {
+  attendanceByQRAPI,
+  getMyAttendancesAPI,
+  getStudentAttendanceClassesAPI,
+} from "@/src/api/authApi";
 import { useAuth } from "@/src/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -19,70 +25,150 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 const SCAN_SIZE = width * 0.7;
 
+type EnrolledCourse = {
+  id: number;
+  courseName: string;
+  courseCode: string;
+  classCode: string;
+  classId: number;
+  courseId: number;
+};
+
+type LastResult = {
+  courseName: string;
+  classCode: string;
+  status: string;
+  at: string;
+};
+
 const QrAttendance = () => {
+  const router = useRouter();
   const { token } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [manualVisible, setManualVisible] = useState(false);
   const [manualCode, setManualCode] = useState("");
-  const [sessionInfo] = useState({
-    name: "Database Systems",
-    remaining: "16:36",
-  });
+  const [coursesVisible, setCoursesVisible] = useState(false);
+  const [enrolled, setEnrolled] = useState<EnrolledCourse[]>([]);
+  const [lastResult, setLastResult] = useState<LastResult | null>(null);
+  const [historyCount, setHistoryCount] = useState(0);
+
+  const loadEnrolled = useCallback(async () => {
+    try {
+      const res = await getStudentAttendanceClassesAPI();
+      const raw = res.data?.data ?? res.data ?? [];
+      const list = (Array.isArray(raw) ? raw : [])
+        .map((e: any) => {
+          const id = Number(e.ID ?? e.id);
+          const course = e.Course ?? e.course ?? {};
+          const cls = e.Class ?? e.class ?? {};
+          return {
+            id,
+            courseName: String(course.Name ?? course.name ?? "Môn học"),
+            courseCode: String(course.Code ?? course.code ?? ""),
+            classCode: String(cls.ClassCode ?? cls.classCode ?? ""),
+            classId: Number(e.ClassID ?? e.classId ?? cls.ID ?? 0),
+            courseId: Number(e.CourseID ?? e.courseId ?? course.ID ?? 0),
+          };
+        })
+        .filter((x: EnrolledCourse) => x.id > 0);
+      setEnrolled(list);
+    } catch (e) {
+      console.log("load enrolled attendance classes", e);
+      setEnrolled([]);
+    }
+  }, []);
+
+  const loadHistoryHint = useCallback(async () => {
+    try {
+      const res = await getMyAttendancesAPI();
+      const raw = res.data?.data ?? [];
+      setHistoryCount(Array.isArray(raw) ? raw.length : 0);
+    } catch {
+      setHistoryCount(0);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!permission?.granted) {
-      requestPermission();
-    }
+    if (!permission?.granted) requestPermission();
   }, [permission, requestPermission]);
+
+  useEffect(() => {
+    loadEnrolled();
+    loadHistoryHint();
+  }, [loadEnrolled, loadHistoryHint]);
 
   const handleAttendance = useCallback(
     async (code: string) => {
       if (!code || loading) return;
-
       setLoading(true);
       try {
-        if (!token) {
-          throw new Error("Bạn chưa đăng nhập.");
-        }
-        await attendanceByQRAPI(code.trim());
+        if (!token) throw new Error("Bạn chưa đăng nhập.");
 
-        Alert.alert("Điểm danh thành công ✅", `Bạn đã điểm danh thành công!`, [
-          {
-            text: "OK",
-            onPress: () => {
-              setScanned(false);
-              setManualCode("");
-              setManualVisible(false);
-            },
-          },
-        ]);
-      } catch (error: any) {
+        // Backend nhận code hoặc qrCode — môn học lấy từ session QR, không cố định
+        const res = await attendanceByQRAPI(code.trim());
+        const data = res.data?.data ?? {};
+        const enrollment = data.Enrollment ?? data.enrollment;
+        const courseName =
+          enrollment?.Course?.Name ??
+          enrollment?.Course?.name ??
+          enrollment?.course?.name ??
+          "Môn học";
+        const classCode =
+          enrollment?.Class?.ClassCode ??
+          enrollment?.Class?.classCode ??
+          enrollment?.class?.classCode ??
+          "";
+
+        const result: LastResult = {
+          courseName: String(courseName),
+          classCode: String(classCode),
+          status: String(data.Status ?? data.status ?? "present"),
+          at: new Date().toLocaleTimeString("vi-VN"),
+        };
+        setLastResult(result);
+        loadHistoryHint();
+
         Alert.alert(
-          "Điểm danh thất bại",
-          error?.response?.data?.message ||
-            error?.response?.data?.error ||
-            error?.message ||
-            "Mã QR không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.",
+          "Điểm danh thành công",
+          `Môn: ${result.courseName}${
+            result.classCode ? `\nLớp: ${result.classCode}` : ""
+          }\nTrạng thái: có mặt`,
           [
             {
-              text: "Thử lại",
+              text: "OK",
               onPress: () => {
                 setScanned(false);
                 setManualCode("");
+                setManualVisible(false);
               },
             },
           ],
         );
+      } catch (error: any) {
+        const msg =
+          error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "Mã QR không hợp lệ hoặc đã hết hạn.";
+        Alert.alert("Điểm danh thất bại", msg, [
+          {
+            text: "Thử lại",
+            onPress: () => {
+              setScanned(false);
+              setManualCode("");
+            },
+          },
+        ]);
       } finally {
         setLoading(false);
       }
     },
-    [loading, sessionInfo.name],
+    [loading, token, loadHistoryHint],
   );
 
   const onBarcodeScanned = useCallback(
@@ -102,7 +188,6 @@ const QrAttendance = () => {
     handleAttendance(manualCode.trim());
   };
 
-  // Chưa có quyền camera
   if (!permission) {
     return (
       <View style={styles.center}>
@@ -117,7 +202,7 @@ const QrAttendance = () => {
         <Ionicons name="camera-outline" size={64} color="#5B5BD6" />
         <Text style={styles.permissionTitle}>Cần quyền Camera</Text>
         <Text style={styles.permissionText}>
-          Ứng dụng cần quyền truy cập camera để quét mã QR điểm danh
+          Ứng dụng cần camera để quét mã QR điểm danh
         </Text>
         <TouchableOpacity
           style={styles.permissionButton}
@@ -133,44 +218,39 @@ const QrAttendance = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Camera */}
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
-        barcodeScannerSettings={{
-          barcodeTypes: ["qr"],
-        }}
+        barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         onBarcodeScanned={scanned || loading ? undefined : onBarcodeScanned}
       />
 
-      {/* Overlay tối */}
       <View style={styles.overlay}>
-        {/* Header */}
         <SafeAreaView>
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backButton} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.back()}
+              activeOpacity={0.7}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Mã QR điểm danh</Text>
-            <View style={styles.headerSpacer} />
+            <Text style={styles.headerTitle}>Điểm danh QR</Text>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => setCoursesVisible(true)}>
+              <Ionicons name="list" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
 
-        {/* Vùng quét */}
         <View style={styles.scanArea}>
           <Text style={styles.scanTitle}>Quét mã QR</Text>
-          <Text style={styles.scanSubtitle}>
-            Hướng camera của bạn để quét{"\n"}mã QR điểm danh
-          </Text>
 
           <View style={styles.frameWrapper}>
-            {/* 4 góc khung */}
             <View style={[styles.corner, styles.topLeft]} />
             <View style={[styles.corner, styles.topRight]} />
             <View style={[styles.corner, styles.bottomLeft]} />
             <View style={[styles.corner, styles.bottomRight]} />
-
-            {/* Khung trong suốt */}
             <View style={styles.scanFrame} />
           </View>
 
@@ -182,77 +262,124 @@ const QrAttendance = () => {
           )}
         </View>
 
-        {/* Thông tin phiên + nút nhập thủ công */}
         <View style={styles.bottomSection}>
           <View style={styles.sessionCard}>
-            <Text style={styles.sessionText}>
-              Phiên: <Text style={styles.sessionBold}>{sessionInfo.name}</Text>
-            </Text>
-            <Text style={styles.timerText}>
-              Thời gian còn lại:{" "}
-              <Text style={styles.timerValue}>{sessionInfo.remaining}</Text>
-            </Text>
+            {lastResult ? (
+              <>
+                <Text style={styles.sessionText}>
+                  Vừa điểm danh:{" "}
+                  <Text style={styles.sessionBold}>
+                    {lastResult.courseName}
+                  </Text>
+                </Text>
+                <Text style={styles.timerText}>
+                  {lastResult.classCode ? `Lớp ${lastResult.classCode} · ` : ""}
+                  {lastResult.at} · có mặt
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.sessionText}>
+                  Đang học{" "}
+                  <Text style={styles.sessionBold}>{enrolled.length} môn</Text>
+                </Text>
+                <Text style={styles.timerText}>
+                  Lịch sử điểm danh: {historyCount} bản ghi · Bấm icon danh sách
+                  để xem môn
+                </Text>
+              </>
+            )}
           </View>
 
           <TouchableOpacity
             style={styles.manualButton}
             onPress={() => setManualVisible(true)}
-            activeOpacity={0.8}
-            disabled={loading}>
+            activeOpacity={0.8}>
             <Ionicons name="keypad-outline" size={18} color="#5B5BD6" />
-            <Text style={styles.manualText}>Nhập mã thủ công</Text>
+            <Text style={styles.manualButtonText}>Nhập mã thủ công</Text>
           </TouchableOpacity>
+
+          {scanned && !loading && (
+            <TouchableOpacity
+              style={styles.rescanBtn}
+              onPress={() => setScanned(false)}>
+              <Text style={styles.rescanText}>Quét tiếp</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      {/* Modal nhập mã thủ công */}
-      <Modal
-        visible={manualVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setManualVisible(false)}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Nhập mã điểm danh</Text>
-            <Text style={styles.modalSubtitle}>
-              Nhập mã được giáo viên cung cấp
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Nhập mã..."
-              placeholderTextColor="#9CA3AF"
-              value={manualCode}
-              onChangeText={setManualCode}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              editable={!loading}
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => {
-                  setManualVisible(false);
-                  setManualCode("");
-                }}
-                disabled={loading}>
-                <Text style={styles.cancelText}>Hủy</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
-                onPress={handleManualSubmit}
-                disabled={loading}>
-                {loading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.submitText}>Điểm danh</Text>
-                )}
+      {/* Môn đang học (để SV biết mình có thể điểm danh môn nào) */}
+      <Modal visible={coursesVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Môn đang học</Text>
+              <TouchableOpacity onPress={() => setCoursesVisible(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
+            <Text style={styles.modalHint}>
+              Quét QR của GV cho đúng môn bên dưới. Hệ thống tự nhận môn từ mã
+              QR.
+            </Text>
+            <FlatList
+              data={enrolled}
+              keyExtractor={(i) => String(i.id)}
+              ListEmptyComponent={
+                <Text style={styles.empty}>
+                  Chưa có môn đăng ký / enrollment
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <View style={styles.courseRow}>
+                  <Ionicons name="book-outline" size={18} color="#5B5BD6" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.courseName}>
+                      {item.courseCode ? `${item.courseCode} · ` : ""}
+                      {item.courseName}
+                    </Text>
+                    <Text style={styles.courseMeta}>
+                      Lớp {item.classCode || item.classId}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Nhập mã thủ công */}
+      <Modal visible={manualVisible} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={styles.modalBox}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Nhập mã điểm danh</Text>
+              <TouchableOpacity onPress={() => setManualVisible(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={manualCode}
+              onChangeText={setManualCode}
+              placeholder="Dán hoặc gõ mã QR"
+              placeholderTextColor="#9CA3AF"
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={handleManualSubmit}
+              disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.submitText}>Xác nhận điểm danh</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -263,100 +390,75 @@ const QrAttendance = () => {
 export default QrAttendance;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
+  container: { flex: 1, backgroundColor: "#000" },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F3EEFF",
   },
-
-  // Permission
   permissionContainer: {
     flex: 1,
-    backgroundColor: "#F3EEFF",
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 32,
+    padding: 32,
+    backgroundColor: "#F3EEFF",
   },
   permissionTitle: {
     fontSize: 20,
     fontWeight: "700",
+    marginTop: 16,
     color: "#1A1A1A",
-    marginTop: 20,
   },
   permissionText: {
-    fontSize: 15,
-    color: "#6B7280",
     textAlign: "center",
-    marginTop: 10,
-    lineHeight: 22,
+    color: "#6B7280",
+    marginTop: 8,
+    marginBottom: 24,
   },
   permissionButton: {
-    marginTop: 28,
     backgroundColor: "#5B5BD6",
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: 12,
   },
-  permissionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  // Overlay
+  permissionButtonText: { color: "#FFF", fontWeight: "700" },
   overlay: {
     ...StyleSheet.absoluteFill,
     justifyContent: "space-between",
+    backgroundColor: "rgba(0,0,0,0.35)",
   },
-
-  // Header
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "center",
     alignItems: "center",
   },
   headerTitle: {
     flex: 1,
     textAlign: "center",
+    color: "#FFF",
     fontSize: 17,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  headerSpacer: {
-    width: 40,
-  },
-
-  // Scan area
-  scanArea: {
-    alignItems: "center",
-  },
-  scanTitle: {
-    fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
+  },
+  scanArea: { alignItems: "center", paddingHorizontal: 24 },
+  scanTitle: {
+    color: "#FFF",
+    fontSize: 22,
+    fontWeight: "800",
     marginBottom: 8,
   },
   scanSubtitle: {
-    fontSize: 14,
     color: "rgba(255,255,255,0.85)",
     textAlign: "center",
+    marginBottom: 24,
     lineHeight: 20,
-    marginBottom: 28,
   },
   frameWrapper: {
     width: SCAN_SIZE,
@@ -367,175 +469,132 @@ const styles = StyleSheet.create({
   scanFrame: {
     width: SCAN_SIZE - 8,
     height: SCAN_SIZE - 8,
-    borderRadius: 12,
-    backgroundColor: "transparent",
+    borderRadius: 16,
   },
   corner: {
     position: "absolute",
-    width: 32,
-    height: 32,
-    borderColor: "#5B5BD6",
+    width: 28,
+    height: 28,
+    borderColor: "#FFF",
   },
   topLeft: {
     top: 0,
     left: 0,
     borderTopWidth: 4,
     borderLeftWidth: 4,
-    borderTopLeftRadius: 10,
+    borderTopLeftRadius: 12,
   },
   topRight: {
     top: 0,
     right: 0,
     borderTopWidth: 4,
     borderRightWidth: 4,
-    borderTopRightRadius: 10,
+    borderTopRightRadius: 12,
   },
   bottomLeft: {
     bottom: 0,
     left: 0,
     borderBottomWidth: 4,
     borderLeftWidth: 4,
-    borderBottomLeftRadius: 10,
+    borderBottomLeftRadius: 12,
   },
   bottomRight: {
     bottom: 0,
     right: 0,
     borderBottomWidth: 4,
     borderRightWidth: 4,
-    borderBottomRightRadius: 10,
+    borderBottomRightRadius: 12,
   },
-
   loadingBox: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 20,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    gap: 8,
+    marginTop: 16,
   },
-  loadingText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    marginLeft: 10,
-    fontWeight: "500",
-  },
-
-  // Bottom
-  bottomSection: {
-    paddingHorizontal: 24,
-    paddingBottom: 36,
-    alignItems: "center",
-  },
+  loadingText: { color: "#FFF", fontWeight: "600" },
+  bottomSection: { padding: 20, paddingBottom: 32 },
   sessionCard: {
     backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    width: "100%",
-    alignItems: "center",
-    marginBottom: 16,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
   },
-  sessionText: {
-    fontSize: 15,
-    color: "#4A4A4A",
-    marginBottom: 6,
-  },
-  sessionBold: {
-    fontWeight: "700",
-    color: "#1A1A1A",
-  },
-  timerText: {
-    fontSize: 15,
-    color: "#4A4A4A",
-  },
-  timerValue: {
-    fontWeight: "700",
-    color: "#5B5BD6",
-  },
+  sessionText: { fontSize: 14, color: "#374151" },
+  sessionBold: { fontWeight: "800", color: "#1A1A1A" },
+  timerText: { fontSize: 12, color: "#6B7280", marginTop: 4 },
   manualButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 14,
+    justifyContent: "center",
     gap: 8,
+    backgroundColor: "#FFF",
+    borderRadius: 14,
+    paddingVertical: 14,
   },
-  manualText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#5B5BD6",
+  manualButtonText: { color: "#5B5BD6", fontWeight: "700", fontSize: 15 },
+  rescanBtn: { alignItems: "center", marginTop: 12 },
+  rescanText: {
+    color: "#FFF",
+    fontWeight: "700",
+    textDecorationLine: "underline",
   },
-
-  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "flex-end",
   },
-  modalContent: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 40,
+  modalBox: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "70%",
+    paddingBottom: 28,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    textAlign: "center",
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 6,
-    marginBottom: 24,
-  },
-  input: {
-    backgroundColor: "#F3F4F6",
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: "#1A1A1A",
-    marginBottom: 24,
-    textAlign: "center",
-    letterSpacing: 2,
-    fontWeight: "600",
-  },
-  modalActions: {
+  modalHead: {
     flexDirection: "row",
-    gap: 12,
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: "#F3F4F6",
+    justifyContent: "space-between",
     alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
   },
-  cancelText: {
-    fontSize: 16,
-    fontWeight: "600",
+  modalTitle: { fontSize: 17, fontWeight: "700" },
+  modalHint: {
+    fontSize: 12,
     color: "#6B7280",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    lineHeight: 18,
+  },
+  courseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  courseName: { fontSize: 14, fontWeight: "700", color: "#1A1A1A" },
+  courseMeta: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  empty: { textAlign: "center", color: "#9CA3AF", padding: 24 },
+  input: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
   },
   submitBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 14,
+    marginHorizontal: 16,
+    marginTop: 16,
     backgroundColor: "#5B5BD6",
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: "center",
   },
-  submitBtnDisabled: {
-    opacity: 0.7,
-  },
-  submitText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
+  submitText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
 });

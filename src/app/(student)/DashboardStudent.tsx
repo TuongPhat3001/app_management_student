@@ -71,6 +71,15 @@ const DashboardStudent = () => {
     fetchDashboard();
   };
 
+  const goTo = (route: string) => {
+    // Dùng pathname rõ ràng — tránh nhầm tab Lịch
+    try {
+      router.push(route as any);
+    } catch (e) {
+      console.log("nav error", route, e);
+    }
+  };
+
   const cards = [
     {
       label: "Học phần đang học",
@@ -179,7 +188,7 @@ const DashboardStudent = () => {
               key={item.label}
               style={styles.statCard}
               activeOpacity={0.75}
-              onPress={() => router.push(item.route as any)}>
+              onPress={() => goTo(item.route)}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.statLabel}>{item.label}</Text>
                 <Text style={[styles.statValue, { color: item.color }]}>
@@ -199,7 +208,7 @@ const DashboardStudent = () => {
             key={action.title}
             style={styles.actionCard}
             activeOpacity={0.7}
-            onPress={() => router.push(action.route as any)}>
+            onPress={() => goTo(action.route)}>
             <View
               style={[
                 styles.actionIcon,

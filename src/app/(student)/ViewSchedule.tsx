@@ -136,46 +136,201 @@ const MONTH_NAMES = [
   "Tháng 12",
 ];
 
-const makeMockItems = (dayKey: string): ScheduleItem[] => {
-  if (dayKey !== "Monday" && dayKey !== getTodayKey()) return [];
-  return [
-    {
-      id: 1,
-      courseName: "Database Systems",
-      classCode: "DB101",
-      startTime: "08:00",
-      endTime: "09:30",
-      room: "A101",
-      teacherName: "Nguyễn Văn A",
-      credit: 3,
-      status: "active",
-      dayKey,
-    },
-    {
-      id: 2,
-      courseName: "Database Systems",
-      classCode: "DB101",
-      startTime: "10:00",
-      endTime: "11:30",
-      room: "A101",
-      teacherName: "Nguyễn Văn A",
-      credit: 3,
-      status: "upcoming",
-      dayKey,
-    },
-    {
-      id: 3,
-      courseName: "Web Development",
-      classCode: "WEB205",
-      startTime: "13:30",
-      endTime: "15:00",
-      room: "B102",
-      teacherName: "Nguyễn Văn B",
-      credit: 3,
-      status: "upcoming",
-      dayKey,
-    },
-  ];
+/** Chuẩn hoá day_of_week từ backend → key lịch (Sunday..Saturday) */
+const normalizeDayKey = (raw: any): string => {
+  let s = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFC");
+  if (!s) return "";
+  // bỏ dấu chấm/phẩy thừa
+  s = s.replace(/[.,;]/g, " ").replace(/\s+/g, " ").trim();
+
+  const map: Record<string, string> = {
+    sunday: "Sunday",
+    sun: "Sunday",
+    cn: "Sunday",
+    "chủ nhật": "Sunday",
+    "chu nhat": "Sunday",
+    monday: "Monday",
+    mon: "Monday",
+    t2: "Monday",
+    "thứ 2": "Monday",
+    "thu 2": "Monday",
+    thu2: "Monday",
+    "thứ hai": "Monday",
+    "thu hai": "Monday",
+    tuesday: "Tuesday",
+    tue: "Tuesday",
+    tues: "Tuesday",
+    t3: "Tuesday",
+    "thứ 3": "Tuesday",
+    "thu 3": "Tuesday",
+    thu3: "Tuesday",
+    "thứ ba": "Tuesday",
+    wednesday: "Wednesday",
+    wed: "Wednesday",
+    t4: "Wednesday",
+    "thứ 4": "Wednesday",
+    "thu 4": "Wednesday",
+    thu4: "Wednesday",
+    "thứ tư": "Wednesday",
+    "thu tu": "Wednesday",
+    thursday: "Thursday",
+    thu: "Thursday",
+    thur: "Thursday",
+    thurs: "Thursday",
+    t5: "Thursday",
+    "thứ 5": "Thursday",
+    "thu 5": "Thursday",
+    thu5: "Thursday",
+    "thứ năm": "Thursday",
+    friday: "Friday",
+    fri: "Friday",
+    t6: "Friday",
+    "thứ 6": "Friday",
+    "thu 6": "Friday",
+    thu6: "Friday",
+    "thứ sáu": "Friday",
+    saturday: "Saturday",
+    sat: "Saturday",
+    t7: "Saturday",
+    "thứ 7": "Saturday",
+    "thu 7": "Saturday",
+    thu7: "Saturday",
+    "thứ bảy": "Saturday",
+  };
+  if (map[s]) return map[s];
+
+  // startsWith: "monday...", "mon ", "thứ 2..."
+  if (s.startsWith("mon") || s.includes("thứ 2") || s.includes("thu 2"))
+    return "Monday";
+  if (s.startsWith("tue") || s.includes("thứ 3") || s.includes("thu 3"))
+    return "Tuesday";
+  if (s.startsWith("wed") || s.includes("thứ 4") || s.includes("thu 4"))
+    return "Wednesday";
+  if (
+    (s.startsWith("thu") && !s.startsWith("tue")) ||
+    s.includes("thứ 5") ||
+    s.includes("thu 5")
+  )
+    return "Thursday";
+  if (s.startsWith("fri") || s.includes("thứ 6") || s.includes("thu 6"))
+    return "Friday";
+  if (s.startsWith("sat") || s.includes("thứ 7") || s.includes("thu 7"))
+    return "Saturday";
+  if (s.startsWith("sun") || s.includes("chủ nhật") || s === "cn")
+    return "Sunday";
+
+  // số: 0-6 (CN=0) hoặc 1-7 (T2=1 ... CN=7)
+  const n = Number(s);
+  if (!Number.isNaN(n)) {
+    if (n >= 0 && n <= 6) return DAY_KEYS[n];
+    if (n >= 1 && n <= 7) {
+      // 1=Mon ... 6=Sat, 7=Sun
+      return DAY_KEYS[n === 7 ? 0 : n];
+    }
+  }
+
+  const titled = s.charAt(0).toUpperCase() + s.slice(1);
+  if (DAY_KEYS.includes(titled)) return titled;
+  return "";
+};
+
+const parseTimeToSort = (t: string): number => {
+  const m = String(t || "").match(/(\d{1,2}):(\d{2})/);
+  if (!m) return 9999;
+  return Number(m[1]) * 60 + Number(m[2]);
+};
+
+const mapScheduleRow = (item: any, index: number): ScheduleItem | null => {
+  const dayKey = normalizeDayKey(
+    item.day_of_week ?? item.dayOfWeek ?? item.DayOfWeek ?? item.day,
+  );
+  if (!dayKey) return null;
+
+  const start =
+    item.start_time ||
+    item.startTime ||
+    item.StartTime ||
+    item.period ||
+    item.session ||
+    item.Session ||
+    "";
+  const end = item.end_time || item.endTime || item.EndTime || "";
+
+  return {
+    id: Number(item.id ?? item.ID ?? index + 1),
+    courseName: String(
+      item.course_name ?? item.courseName ?? item.CourseName ?? "Môn học",
+    ),
+    classCode: String(
+      item.class_code ??
+        item.classCode ??
+        item.course_code ??
+        item.courseCode ??
+        "",
+    ),
+    startTime: String(start),
+    endTime: String(end),
+    room: String(
+      item.room ?? item.room_name ?? item.Room ?? item.RoomName ?? "—",
+    ),
+    teacherName: String(
+      item.teacher_name ?? item.teacherName ?? item.TeacherName ?? "—",
+    ),
+    credit: Number(item.credit ?? item.credits ?? 0) || (undefined as any),
+    status: "upcoming",
+    dayKey,
+  };
+};
+
+/** Cache lịch trong RAM — mở lại tab không gọi API lại ngay */
+const SCHEDULE_CACHE_TTL_MS = 60_000;
+let scheduleCache: {
+  tokenKey: string;
+  map: Record<string, ScheduleItem[]>;
+  total: number;
+  at: number;
+} | null = null;
+
+const emptyMap = (): Record<string, ScheduleItem[]> => {
+  const m: Record<string, ScheduleItem[]> = {};
+  DAY_KEYS.forEach((k) => {
+    m[k] = [];
+  });
+  return m;
+};
+
+const buildScheduleMap = (
+  rows: any[],
+): {
+  map: Record<string, ScheduleItem[]>;
+  total: number;
+} => {
+  const map = emptyMap();
+  for (let index = 0; index < rows.length; index++) {
+    const item = rows[index];
+    const mapped = mapScheduleRow(item, index);
+    if (mapped?.dayKey && map[mapped.dayKey]) {
+      map[mapped.dayKey].push(mapped);
+    } else {
+      // dayOfWeek lạ → Monday để vẫn hiện, không mất dữ liệu
+      const fb = mapScheduleRow(
+        { ...item, dayOfWeek: "Monday", day_of_week: "Monday" },
+        index,
+      );
+      if (fb) map.Monday.push(fb);
+    }
+  }
+  for (let i = 0; i < DAY_KEYS.length; i++) {
+    const k = DAY_KEYS[i];
+    map[k].sort(
+      (a, b) => parseTimeToSort(a.startTime) - parseTimeToSort(b.startTime),
+    );
+  }
+  const total = DAY_KEYS.reduce((sum, k) => sum + map[k].length, 0);
+  return { map, total };
 };
 
 const ScheduleCard = React.memo(({ item }: { item: ScheduleItem }) => (
@@ -193,10 +348,15 @@ const ScheduleCard = React.memo(({ item }: { item: ScheduleItem }) => (
       <Text style={styles.courseName} numberOfLines={1}>
         {item.courseName}
       </Text>
-      <Text style={styles.roomText}>Room {item.room}</Text>
+      <Text style={styles.roomText}>
+        {item.classCode ? `${item.classCode} · ` : ""}Phòng {item.room}
+      </Text>
       <Text style={styles.rangeText}>
         {item.startTime}
         {item.endTime ? `-${item.endTime}` : ""}
+        {item.teacherName && item.teacherName !== "—"
+          ? ` · ${item.teacherName}`
+          : ""}
       </Text>
     </View>
   </View>
@@ -215,39 +375,72 @@ const ViewSchedule: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [totalSlots, setTotalSlots] = useState(0);
+
   const fetchSchedule = useCallback(
     async (isRefresh = false) => {
       if (!token) return;
+      const tokenKey = String(token).slice(-24);
+
+      // 1) Dùng cache trước → mở tab gần như tức thì
+      if (
+        !isRefresh &&
+        scheduleCache &&
+        scheduleCache.tokenKey === tokenKey &&
+        Date.now() - scheduleCache.at < SCHEDULE_CACHE_TTL_MS
+      ) {
+        setScheduleMap(scheduleCache.map);
+        setTotalSlots(scheduleCache.total);
+        setHasFetched(true);
+        setLoading(false);
+        setFetchError(
+          scheduleCache.total === 0
+            ? "Chưa có lịch. Hãy đăng ký học phần (và học phần phải có schedules trên server)."
+            : null,
+        );
+        return;
+      }
+
       try {
         if (!isRefresh && !hasFetched) setLoading(true);
-        const response = await getScheduleAPI();
-        const raw = response?.data?.data || [];
+        setFetchError(null);
 
-        const map: Record<string, ScheduleItem[]> = {};
-        raw.forEach((item: any, index: number) => {
-          const dayKey = item.day_of_week || "Monday";
-          if (!map[dayKey]) map[dayKey] = [];
-          map[dayKey].push({
-            id: item.id ?? index,
-            courseName: item.course_name || item.courseName || "N/A",
-            classCode: item.course_code || item.classCode || "",
-            startTime: item.period || item.startTime || "",
-            endTime: item.endTime || "",
-            room: item.room || "",
-            teacherName: item.teacher_name || item.teacherName || "",
-            credit: item.credit || 3,
-            status: item.status || "upcoming",
-            dayKey,
-          });
-        });
+        const response = await getScheduleAPI();
+        const raw = response?.data?.data ?? response?.data ?? [];
+        const rows = Array.isArray(raw) ? raw : [];
+
+        // Parse nhanh, một vòng
+        const { map, total } = buildScheduleMap(rows);
+
+        scheduleCache = { tokenKey, map, total, at: Date.now() };
+        setTotalSlots(total);
         setScheduleMap(map);
         setHasFetched(true);
-      } catch {
-        const map: Record<string, ScheduleItem[]> = {};
-        DAY_KEYS.forEach((k) => {
-          map[k] = makeMockItems(k);
-        });
-        setScheduleMap(map);
+
+        if (rows.length === 0) {
+          setFetchError(
+            "Chưa có lịch. Hãy đăng ký học phần (và học phần phải có schedules trên server).",
+          );
+        }
+
+        const todayKey = getTodayKey();
+        if ((map[todayKey] || []).length === 0 && total > 0) {
+          const first = DAY_KEYS.find((k) => (map[k] || []).length > 0);
+          if (first) setSelectedDayKey(first);
+        }
+      } catch (e: any) {
+        const status = e?.response?.status;
+        const msg =
+          e?.response?.data?.message || e?.message || "Không tải được lịch học";
+        setScheduleMap(emptyMap());
+        setTotalSlots(0);
+        setHasFetched(true);
+        setFetchError(
+          status === 401 || status === 403
+            ? "Phiên đăng nhập hết hạn / không phải tài khoản sinh viên."
+            : String(msg),
+        );
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -266,11 +459,18 @@ const ViewSchedule: React.FC = () => {
   }, [fetchSchedule]);
 
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
+  // Chỉ tính lưới tuần/tháng khi đang xem mode đó — tiết kiệm khi nhiều môn
   const weeksInMonth = useMemo(
-    () => getWeeksInMonth(currentDate),
-    [currentDate],
+    () =>
+      viewMode === "week" || viewMode === "month"
+        ? getWeeksInMonth(currentDate)
+        : [],
+    [currentDate, viewMode],
   );
-  const monthGrid = useMemo(() => getMonthGrid(currentDate), [currentDate]);
+  const monthGrid = useMemo(
+    () => (viewMode === "month" ? getMonthGrid(currentDate) : []),
+    [currentDate, viewMode],
+  );
 
   const dayItems = useMemo(
     () => scheduleMap[selectedDayKey] || [],
@@ -292,6 +492,16 @@ const ViewSchedule: React.FC = () => {
 
   const renderDayView = () => (
     <>
+      {!!fetchError && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>{fetchError}</Text>
+        </View>
+      )}
+      {totalSlots > 0 && (
+        <Text style={styles.totalHint}>
+          Tuần này có {totalSlots} buổi · đang xem {selectedDayKey}
+        </Text>
+      )}
       <View style={styles.dateStrip}>
         {weekDays.map((d) => {
           const active = selectedDayKey === d.key;
@@ -318,13 +528,14 @@ const ViewSchedule: React.FC = () => {
 
       <FlatList
         data={dayItems}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item, index) => `${item.dayKey}-${item.id}-${index}`}
         renderItem={({ item }) => <ScheduleCard item={item} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        initialNumToRender={8}
-        maxToRenderPerBatch={8}
-        windowSize={5}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={3}
+        updateCellsBatchingPeriod={50}
         removeClippedSubviews
         refreshControl={
           <RefreshControl
@@ -339,7 +550,7 @@ const ViewSchedule: React.FC = () => {
             <Ionicons name="calendar-outline" size={64} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>Không có lịch học</Text>
             <Text style={styles.emptySubtitle}>
-              Ngày này bạn được nghỉ ngơi
+              Không có tiết học trong ngày này (lịch theo môn bạn đã đăng ký)
             </Text>
           </View>
         }
@@ -576,6 +787,23 @@ const ViewSchedule: React.FC = () => {
 export default ViewSchedule;
 
 const styles = StyleSheet.create({
+  errorBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
+    padding: 12,
+  },
+  errorBannerText: { color: "#92400E", fontSize: 13, lineHeight: 18 },
+  totalHint: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    fontSize: 12,
+    color: "#5B5BD6",
+    fontWeight: "600",
+  },
+
   container: {
     flex: 1,
     backgroundColor: "#F3EEFF",

@@ -1,9 +1,17 @@
+import {
+  cancelCourseRegistrationAPI,
+  getMyCourseRegistrationsAPI,
+  getOpenCourseClassesAPI,
+  registerCourseAPI,
+} from "@/src/api/authApi";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
+  FlatList,
+  RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
@@ -13,829 +21,479 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type Step = "search" | "list" | "confirm" | "success" | "registered";
+type Tab = "open" | "mine";
 
-interface Course {
-  id: number;
-  name: string;
-  code: string;
-  credits: number;
-  teacher: string;
-  schedule?: string;
-  time?: string;
-  room?: string;
-  slots: string;
-  registered?: boolean;
-}
+type OpenCourse = {
+  courseOfferingId: number;
+  classId: number;
+  courseId: number;
+  classCode: string;
+  courseCode: string;
+  courseName: string;
+  teacherName: string;
+  semesterName: string;
+  roomName: string;
+  maxStudents: number;
+  currentStudents: number;
+  scheduleText: string;
+  credits?: number;
+};
 
-const MOCK_COURSES: Course[] = [
-  {
-    id: 1,
-    name: "Database Systems",
-    code: "CSDL - 202",
-    credits: 3,
-    teacher: "Trương Tường Phát",
-    schedule: "Thứ 2 - Thứ 4",
-    time: "07:30 - 09:10",
-    room: "Phòng A201",
-    slots: "12/40",
-  },
-  {
-    id: 2,
-    name: "Web Development",
-    code: "WEB - 205",
-    credits: 3,
-    teacher: "Trương Tường Phát",
-    schedule: "Thứ 3 - Thứ 5",
-    time: "09:30 - 11:10",
-    room: "Phòng B102",
-    slots: "5/35",
-  },
-  {
-    id: 3,
-    name: "Software Engineering",
-    code: "SE101 - 203",
-    credits: 3,
-    teacher: "Trương Tường Phát",
-    schedule: "Thứ 6",
-    time: "13:00 - 16:00",
-    room: "Phòng A103",
-    slots: "10/40",
-  },
-];
+type RegisteredItem = {
+  enrollmentId: number;
+  courseName: string;
+  courseCode: string;
+  classCode: string;
+  status: string;
+  enrollDate?: string;
+};
 
-const MOCK_REGISTERED: Course[] = [
-  {
-    id: 1,
-    name: "Database Systems",
-    code: "CSDL - 202",
-    credits: 3,
-    teacher: "Trương Tường Phát",
-    slots: "",
-    registered: true,
-  },
-  {
-    id: 2,
-    name: "Web Development",
-    code: "WEB - 205",
-    credits: 3,
-    teacher: "Trương Tường Phát",
-    slots: "",
-    registered: true,
-  },
-  {
-    id: 3,
-    name: "Software Engineering",
-    code: "SE101 - 203",
-    credits: 3,
-    teacher: "Trương Tường Phát",
-    slots: "",
-    registered: true,
-  },
-  {
-    id: 4,
-    name: "Discrete Mathematics",
-    code: "MATH - 201",
-    credits: 3,
-    teacher: "Trương Tường Phát",
-    slots: "",
-    registered: true,
-  },
-];
-
-const SEMESTERS = ["Học kỳ 1-2026", "Học kỳ 2-2025", "Học kỳ 1-2025"];
+const formatSchedules = (schedules: any[] | undefined): string => {
+  if (!Array.isArray(schedules) || schedules.length === 0)
+    return "Chưa có lịch";
+  return schedules
+    .map((s) => {
+      const day = s.DayOfWeek ?? s.dayOfWeek ?? s.day_of_week ?? "";
+      const start = s.StartTime ?? s.startTime ?? s.start_time ?? "";
+      const end = s.EndTime ?? s.endTime ?? s.end_time ?? "";
+      const session = s.Session ?? s.session ?? "";
+      if (start || end) return `${day} ${start}${end ? `-${end}` : ""}`.trim();
+      return `${day} ${session}`.trim();
+    })
+    .filter(Boolean)
+    .join(" · ");
+};
 
 const RegisterCourses: React.FC = () => {
-  const [step, setStep] = useState<Step>("search");
-  const [semester, setSemester] = useState(SEMESTERS[0]);
-  const [showSemesterPicker, setShowSemesterPicker] = useState(false);
-  const [searchText, setSearchText] = useState("");
-  const [faculty, setFaculty] = useState("Tất cả khoa");
-  const [courseType, setCourseType] = useState("Tất cả học phần");
-  const [courses, setCourses] = useState<Course[]>(MOCK_COURSES);
-  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  const [registeredCourses, setRegisteredCourses] =
-    useState<Course[]>(MOCK_REGISTERED);
-  const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState<Tab>("open");
+  const [openList, setOpenList] = useState<OpenCourse[]>([]);
+  const [mine, setMine] = useState<RegisteredItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
 
-  const handleSearch = async () => {
-    setLoading(true);
+  const loadOpen = useCallback(async () => {
+    const res = await getOpenCourseClassesAPI();
+    const raw = res.data?.data ?? res.data ?? [];
+    const list = (Array.isArray(raw) ? raw : [])
+      .map((item: any): OpenCourse | null => {
+        const classId = Number(
+          item.classId ?? item.ClassID ?? item.class_id ?? 0,
+        );
+        const courseId = Number(
+          item.courseId ?? item.CourseID ?? item.course_id ?? 0,
+        );
+        if (!classId || !courseId) return null;
+        return {
+          courseOfferingId: Number(
+            item.courseOfferingId ?? item.CourseOfferingID ?? item.id ?? 0,
+          ),
+          classId,
+          courseId,
+          classCode: String(item.classCode ?? item.ClassCode ?? ""),
+          courseCode: String(item.courseCode ?? item.CourseCode ?? ""),
+          courseName: String(item.courseName ?? item.CourseName ?? "Học phần"),
+          teacherName: String(item.teacherName ?? item.TeacherName ?? "—"),
+          semesterName: String(item.semesterName ?? item.SemesterName ?? ""),
+          roomName: String(item.roomName ?? item.RoomName ?? "—"),
+          maxStudents: Number(item.maxStudents ?? item.MaxStudents ?? 0),
+          currentStudents: Number(
+            item.currentStudents ?? item.CurrentStudents ?? 0,
+          ),
+          scheduleText: formatSchedules(item.schedules ?? item.Schedules),
+          credits: Number(item.credits ?? item.Credits ?? 0) || undefined,
+        };
+      })
+      .filter(Boolean) as OpenCourse[];
+    setOpenList(list);
+  }, []);
+
+  const loadMine = useCallback(async () => {
+    const res = await getMyCourseRegistrationsAPI();
+    const raw = res.data?.data ?? res.data ?? [];
+    const list = (Array.isArray(raw) ? raw : [])
+      .map((e: any): RegisteredItem | null => {
+        const enrollmentId = Number(e.ID ?? e.id);
+        if (!enrollmentId) return null;
+        const course = e.Course ?? e.course ?? {};
+        const cls = e.Class ?? e.class ?? {};
+        return {
+          enrollmentId,
+          courseName: String(course.Name ?? course.name ?? "Môn học"),
+          courseCode: String(course.Code ?? course.code ?? ""),
+          classCode: String(cls.ClassCode ?? cls.classCode ?? ""),
+          status: String(e.Status ?? e.status ?? "enrolled"),
+          enrollDate: e.EnrollDate ?? e.enrollDate,
+        };
+      })
+      .filter(Boolean) as RegisteredItem[];
+    setMine(list);
+  }, []);
+
+  const loadAll = useCallback(async () => {
     try {
-      const { getOpenCourseClassesAPI } = await import("@/src/api/authApi");
-      const res = await getOpenCourseClassesAPI();
-      const raw = res.data?.data ?? res.data ?? [];
-      const list = Array.isArray(raw) ? raw : [];
-      if (list.length > 0) {
-        const mapped: Course[] = list.map((item: any, idx: number) => ({
-          id: Number(item.id ?? item.ID ?? idx + 1),
-          name:
-            item.courseName ||
-            item.course?.name ||
-            item.className ||
-            item.name ||
-            "Học phần",
-          code:
-            item.classCode ||
-            item.courseCode ||
-            item.code ||
-            `HP-${item.id ?? idx + 1}`,
-          credits: Number(item.credits ?? item.course?.credits ?? 3),
-          teacher:
-            item.teacherName ||
-            item.teacher?.fullName ||
-            item.teacher?.name ||
-            "—",
-          schedule: item.schedule || item.dayOfWeek || undefined,
-          time:
-            item.startTime && item.endTime
-              ? `${item.startTime} - ${item.endTime}`
-              : item.time,
-          room: item.room || item.roomName || undefined,
-          slots:
-            item.capacity != null
-              ? `${item.enrolled ?? item.registered ?? 0}/${item.capacity}`
-              : "—",
-        }));
-        setCourses(mapped);
-      } else {
-        setCourses(MOCK_COURSES);
-      }
-      setStep("list");
-    } catch {
-      setCourses(MOCK_COURSES);
-      setStep("list");
+      await Promise.all([loadOpen(), loadMine()]);
+    } catch (e: any) {
+      console.log("register load", e?.response?.data || e);
+      Alert.alert(
+        "Lỗi",
+        e?.response?.data?.message || "Không tải được danh sách học phần.",
+      );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [loadOpen, loadMine]);
 
-  const handleSelectCourse = (course: Course) => {
-    setSelectedCourse(course);
-    setStep("confirm");
-  };
-
-  const handleConfirmRegister = async () => {
-    if (!selectedCourse) return;
-    setLoading(true);
-    try {
-      const { registerCourseAPI } = await import("@/src/api/authApi");
-      await registerCourseAPI(selectedCourse.id);
-      setRegisteredCourses((prev) => [
-        ...prev,
-        { ...selectedCourse, registered: true },
-      ]);
-      setStep("success");
-    } catch (error: any) {
-      const msg =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        "Đăng ký thất bại. Vui lòng thử lại.";
-      Alert.alert("Lỗi", String(msg));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const goBack = () => {
-    if (step === "list") setStep("search");
-    else if (step === "confirm") setStep("list");
-    else if (step === "success") setStep("search");
-    else if (step === "registered") setStep("search");
-  };
-
-  // ===================== RENDER STEPS =====================
-
-  // --- Step: Search (5.1) ---
-  const renderSearch = () => (
-    <ScrollView
-      contentContainerStyle={styles.scrollPad}
-      keyboardShouldPersistTaps="handled">
-      <Text style={styles.sectionLabel}>Học kỳ</Text>
-      <TouchableOpacity
-        style={styles.dropdown}
-        onPress={() => setShowSemesterPicker(!showSemesterPicker)}
-        activeOpacity={0.7}>
-        <Text style={styles.dropdownText}>{semester}</Text>
-        <Ionicons name="chevron-down" size={18} color="#6B7280" />
-      </TouchableOpacity>
-
-      {showSemesterPicker && (
-        <View style={styles.pickerList}>
-          {SEMESTERS.map((s) => (
-            <TouchableOpacity
-              key={s}
-              style={styles.pickerItem}
-              onPress={() => {
-                setSemester(s);
-                setShowSemesterPicker(false);
-              }}>
-              <Text
-                style={[
-                  styles.pickerItemText,
-                  s === semester && styles.pickerItemActive,
-                ]}>
-                {s}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      <View style={styles.rowButtons}>
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={handleSearch}
-          activeOpacity={0.8}>
-          <Text style={styles.primaryBtnText}>Tra cứu</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.outlineBtn}
-          onPress={() => setStep("registered")}
-          activeOpacity={0.8}>
-          <Text style={styles.outlineBtnText}>Lịch học</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.searchRow}>
-        <View style={styles.searchInputWrap}>
-          <Ionicons name="search" size={18} color="#9CA3AF" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Tìm kiếm học phần, mã môn, giảng viên"
-            placeholderTextColor="#9CA3AF"
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-        </View>
-        <TouchableOpacity style={styles.filterIconBtn} activeOpacity={0.7}>
-          <Ionicons name="options-outline" size={20} color="#5B5BD6" />
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[styles.sectionLabel, { marginTop: 20 }]}>Bộ lọc</Text>
-
-      <TouchableOpacity style={styles.dropdown} activeOpacity={0.7}>
-        <Text style={styles.dropdownText}>{faculty}</Text>
-        <Ionicons name="chevron-down" size={18} color="#6B7280" />
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.dropdown, { marginTop: 12 }]}
-        activeOpacity={0.7}>
-        <Text style={styles.dropdownText}>{courseType}</Text>
-        <Ionicons name="chevron-down" size={18} color="#6B7280" />
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.primaryBtn, { marginTop: 32 }]}
-        onPress={handleSearch}
-        activeOpacity={0.8}>
-        {loading ? (
-          <ActivityIndicator color="#FFF" />
-        ) : (
-          <Text style={styles.primaryBtnText}>Tìm kiếm</Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      loadAll();
+    }, [loadAll]),
   );
 
-  // --- Step: List (5.2) ---
-  const renderList = () => (
-    <ScrollView contentContainerStyle={styles.scrollPad}>
-      <Text style={styles.resultCount}>Tìm thấy {courses.length} học phần</Text>
+  const filteredOpen = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return openList;
+    return openList.filter(
+      (c) =>
+        c.courseName.toLowerCase().includes(q) ||
+        c.courseCode.toLowerCase().includes(q) ||
+        c.classCode.toLowerCase().includes(q) ||
+        c.teacherName.toLowerCase().includes(q),
+    );
+  }, [openList, search]);
 
-      {courses.map((course) => (
-        <View key={course.id} style={styles.courseCard}>
-          <View style={styles.courseInfo}>
-            <Text style={styles.courseName}>{course.name}</Text>
-            <Text style={styles.courseCode}>{course.code}</Text>
-            <Text style={styles.courseMeta}>{course.credits} tín chỉ</Text>
-            <Text style={styles.courseMeta}>Giảng viên: {course.teacher}</Text>
-            <Text style={styles.slotsText}>Còn {course.slots} chỗ</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.registerBtn}
-            onPress={() => handleSelectCourse(course)}
-            activeOpacity={0.8}>
-            <Text style={styles.registerBtnText}>Đăng ký</Text>
-          </TouchableOpacity>
-        </View>
-      ))}
-    </ScrollView>
-  );
+  const isAlreadyRegistered = (courseId: number) =>
+    mine.some(
+      (m) =>
+        m.status !== "cancelled" &&
+        // match by name/code loosely if no courseId on mine
+        true,
+    ) &&
+    // better: check open list against mine course code
+    mine.some((m) => {
+      const open = openList.find((o) => o.courseId === courseId);
+      if (!open) return false;
+      return (
+        m.courseCode &&
+        open.courseCode &&
+        m.courseCode.toLowerCase() === open.courseCode.toLowerCase()
+      );
+    });
 
-  // --- Step: Confirm (5.3) ---
-  const renderConfirm = () => {
-    if (!selectedCourse) return null;
-    return (
-      <ScrollView contentContainerStyle={styles.scrollPad}>
-        <View style={styles.confirmCard}>
-          <Text style={styles.courseName}>{selectedCourse.name}</Text>
-          <Text style={styles.courseCode}>{selectedCourse.code}</Text>
-          <Text style={styles.courseMeta}>
-            {selectedCourse.credits} tín chỉ
-          </Text>
-          <Text style={styles.courseMeta}>
-            Giảng viên: {selectedCourse.teacher}
-          </Text>
+  const handleRegister = (item: OpenCourse) => {
+    if (item.maxStudents > 0 && item.currentStudents >= item.maxStudents) {
+      Alert.alert("Hết chỗ", "Lớp học phần đã đủ sĩ số.");
+      return;
+    }
+    if (isAlreadyRegistered(item.courseId)) {
+      Alert.alert("Đã đăng ký", "Bạn đã đăng ký môn học này rồi.");
+      return;
+    }
 
-          {selectedCourse.schedule && (
-            <>
-              <View style={styles.divider} />
-              <Text style={styles.scheduleTitle}>Lịch học:</Text>
-              <Text style={styles.courseMeta}>{selectedCourse.schedule}</Text>
-              <Text style={styles.courseMeta}>{selectedCourse.time}</Text>
-              <Text style={styles.courseMeta}>{selectedCourse.room}</Text>
-            </>
-          )}
-
-          <View style={styles.slotsBox}>
-            <Text style={styles.slotsBoxText}>
-              Sĩ số hiện tại{" "}
-              <Text style={{ fontWeight: "700" }}>{selectedCourse.slots}</Text>
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.warningBox}>
-          <Ionicons name="information-circle" size={18} color="#D97706" />
-          <Text style={styles.warningText}>
-            Lưu ý: Bạn sẽ không thể đăng ký trùng lịch hoặc vượt quá tín chỉ cho
-            phép.
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.primaryBtn, { marginTop: 24 }]}
-          onPress={handleConfirmRegister}
-          disabled={loading}
-          activeOpacity={0.8}>
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.primaryBtnText}>Xác nhận đăng ký</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.outlineBtnFull, { marginTop: 12 }]}
-          onPress={() => setStep("list")}
-          activeOpacity={0.8}>
-          <Text style={styles.outlineBtnText}>Hủy</Text>
-        </TouchableOpacity>
-      </ScrollView>
+    Alert.alert(
+      "Xác nhận đăng ký",
+      `${item.courseCode} — ${item.courseName}\nLớp: ${item.classCode}\nGV: ${item.teacherName}\nLịch: ${item.scheduleText}`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Đăng ký",
+          onPress: async () => {
+            setSubmittingId(item.courseOfferingId || item.classId);
+            try {
+              await registerCourseAPI(item.classId, item.courseId);
+              Alert.alert(
+                "Thành công",
+                "Đăng ký học phần thành công.\nMôn đã được thêm vào lịch học của bạn.",
+              );
+              await loadAll();
+              setTab("mine");
+            } catch (e: any) {
+              const d = e?.response?.data;
+              Alert.alert(
+                "Đăng ký thất bại",
+                [d?.message, d?.error].filter(Boolean).join("\n") ||
+                  "Không thể đăng ký. Kiểm tra học kỳ đang mở / lịch học phần.",
+              );
+            } finally {
+              setSubmittingId(null);
+            }
+          },
+        },
+      ],
     );
   };
 
-  // --- Step: Success (5.4) ---
-  const renderSuccess = () => (
-    <View style={styles.successContainer}>
-      <View style={styles.successIcon}>
-        <Ionicons name="checkmark" size={48} color="#FFFFFF" />
-      </View>
-      <Text style={styles.successTitle}>Đăng ký thành công!</Text>
-      <Text style={styles.successSubtitle}>
-        Bạn đã đăng ký học phần thành công.
-      </Text>
-      {selectedCourse && (
-        <Text style={styles.successCourse}>
-          {selectedCourse.name} - {selectedCourse.code}
+  const handleCancel = (item: RegisteredItem) => {
+    Alert.alert("Hủy đăng ký", `Hủy ${item.courseName}?`, [
+      { text: "Không", style: "cancel" },
+      {
+        text: "Hủy đăng ký",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await cancelCourseRegistrationAPI(item.enrollmentId);
+            Alert.alert("Thành công", "Đã hủy học phần.");
+            await loadAll();
+          } catch (e: any) {
+            const d = e?.response?.data;
+            Alert.alert(
+              "Lỗi",
+              [d?.message, d?.error].filter(Boolean).join("\n") ||
+                "Hủy thất bại.",
+            );
+          }
+        },
+      },
+    ]);
+  };
+
+  const renderOpenItem = ({ item }: { item: OpenCourse }) => {
+    const full =
+      item.maxStudents > 0 && item.currentStudents >= item.maxStudents;
+    const registered = isAlreadyRegistered(item.courseId);
+    const busy =
+      submittingId === item.courseOfferingId || submittingId === item.classId;
+
+    return (
+      <View style={styles.card}>
+        <Text style={styles.code}>
+          {item.courseCode} · {item.classCode}
         </Text>
-      )}
+        <Text style={styles.name}>{item.courseName}</Text>
+        <Text style={styles.meta}>GV: {item.teacherName}</Text>
+        <Text style={styles.meta}>Phòng: {item.roomName}</Text>
+        <Text style={styles.meta}>Lịch: {item.scheduleText}</Text>
+        {!!item.semesterName && (
+          <Text style={styles.meta}>HK: {item.semesterName}</Text>
+        )}
+        <Text style={styles.slots}>
+          Sĩ số: {item.currentStudents}
+          {item.maxStudents ? `/${item.maxStudents}` : ""}
+          {full ? " (đủ)" : ""}
+        </Text>
 
-      <TouchableOpacity
-        style={[styles.primaryBtn, { marginTop: 40, width: "100%" }]}
-        onPress={() => setStep("registered")}
-        activeOpacity={0.8}>
-        <Text style={styles.primaryBtnText}>Xem lịch học</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.btn,
+            (full || registered || busy) && styles.btnDisabled,
+          ]}
+          disabled={full || registered || busy}
+          onPress={() => handleRegister(item)}
+          activeOpacity={0.8}>
+          {busy ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.btnText}>
+              {registered ? "Đã đăng ký" : full ? "Hết chỗ" : "Đăng ký"}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
+  const renderMineItem = ({ item }: { item: RegisteredItem }) => (
+    <View style={styles.card}>
+      <View style={styles.rowBetween}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.code}>
+            {item.courseCode}
+            {item.classCode ? ` · ${item.classCode}` : ""}
+          </Text>
+          <Text style={styles.name}>{item.courseName}</Text>
+          <Text style={styles.meta}>Trạng thái: {item.status}</Text>
+        </View>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>Đã ĐK</Text>
+        </View>
+      </View>
       <TouchableOpacity
-        style={[styles.outlineBtnFull, { marginTop: 12, width: "100%" }]}
-        onPress={() => {
-          setSelectedCourse(null);
-          setStep("search");
-        }}
-        activeOpacity={0.8}>
-        <Text style={styles.outlineBtnText}>Đăng ký thêm</Text>
+        style={styles.cancelBtn}
+        onPress={() => handleCancel(item)}>
+        <Text style={styles.cancelText}>Hủy đăng ký</Text>
       </TouchableOpacity>
     </View>
   );
 
-  // --- Step: My Registered Courses ---
-  const renderRegistered = () => {
-    const totalCredits = registeredCourses.reduce(
-      (sum, c) => sum + c.credits,
-      0,
-    );
-    return (
-      <ScrollView contentContainerStyle={styles.scrollPad}>
-        <TouchableOpacity
-          style={styles.dropdown}
-          onPress={() => setShowSemesterPicker(!showSemesterPicker)}
-          activeOpacity={0.7}>
-          <Text style={styles.dropdownText}>{semester}</Text>
-          <Ionicons name="chevron-down" size={18} color="#6B7280" />
-        </TouchableOpacity>
-
-        <Text style={styles.summaryText}>
-          Tổng: {registeredCourses.length} học phần - {totalCredits} tín chỉ
-        </Text>
-
-        {registeredCourses.map((course) => (
-          <View key={course.id} style={styles.registeredCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.courseName}>{course.name}</Text>
-              <Text style={styles.courseCode}>{course.code}</Text>
-              <Text style={styles.courseMeta}>{course.credits} tín chỉ</Text>
-            </View>
-            <View style={styles.registeredBadge}>
-              <Text style={styles.registeredBadgeText}>Đã đăng ký</Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    );
-  };
-
-  // ===================== HEADER =====================
-  const getTitle = () => {
-    switch (step) {
-      case "search":
-        return "Đăng ký học phần";
-      case "list":
-        return "Kết quả tìm kiếm";
-      case "confirm":
-        return "Xác nhận đăng ký";
-      case "success":
-        return "";
-      case "registered":
-        return "Học phần đã đăng ký";
-      default:
-        return "";
-    }
-  };
-
-  const showBack = step !== "search" && step !== "success";
-
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.header}>
+        <Text style={styles.title}>Đăng ký học phần</Text>
+      </View>
 
-      {/* Header */}
-      {step !== "success" && (
-        <View style={styles.header}>
-          {showBack ? (
-            <TouchableOpacity
-              onPress={goBack}
-              style={styles.backBtn}
-              activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.backBtn} activeOpacity={0.7}>
-              <Ionicons name="close" size={24} color="#1A1A1A" />
-            </TouchableOpacity>
-          )}
-          <Text style={styles.headerTitle}>{getTitle()}</Text>
-          <View style={styles.headerSpacer} />
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[styles.tab, tab === "open" && styles.tabOn]}
+          onPress={() => setTab("open")}>
+          <Text style={[styles.tabText, tab === "open" && styles.tabTextOn]}>
+            Đang mở ({openList.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === "mine" && styles.tabOn]}
+          onPress={() => setTab("mine")}>
+          <Text style={[styles.tabText, tab === "mine" && styles.tabTextOn]}>
+            Đã đăng ký ({mine.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {tab === "open" && (
+        <View style={styles.searchRow}>
+          <Ionicons name="search" size={18} color="#9CA3AF" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm mã môn, tên, lớp, GV..."
+            value={search}
+            onChangeText={setSearch}
+            placeholderTextColor="#9CA3AF"
+          />
         </View>
       )}
 
-      {/* Content */}
-      {step === "search" && renderSearch()}
-      {step === "list" && renderList()}
-      {step === "confirm" && renderConfirm()}
-      {step === "success" && renderSuccess()}
-      {step === "registered" && renderRegistered()}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#5B5BD6" />
+        </View>
+      ) : (
+        <FlatList
+          data={tab === "open" ? filteredOpen : (mine as any)}
+          keyExtractor={(item: any) =>
+            tab === "open"
+              ? `o-${item.classId}-${item.courseId}`
+              : `m-${item.enrollmentId}`
+          }
+          renderItem={tab === "open" ? renderOpenItem : (renderMineItem as any)}
+          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                loadAll();
+              }}
+              colors={["#5B5BD6"]}
+            />
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {tab === "open"
+                ? "Không có lớp học phần đang mở (status=open + có lịch)."
+                : "Bạn chưa đăng ký học phần nào."}
+            </Text>
+          }
+          ListHeaderComponent={
+            tab === "open" ? (
+              <Text style={styles.hint}>
+                Bấm Đăng ký → lưu Enrollment vào DB → môn xuất hiện trong{" "}
+                <Text style={{ fontWeight: "800" }}>Xem lịch</Text>.
+              </Text>
+            ) : null
+          }
+        />
+      )}
     </SafeAreaView>
   );
 };
 
 export default RegisterCourses;
 
-// ============ Styles ============
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F3EEFF",
-  },
+  safe: { flex: 1, backgroundColor: "#F3EEFF" },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFF",
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "flex-start",
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#1A1A1A",
-  },
-  headerSpacer: {
-    width: 36,
-  },
-  scrollPad: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-
-  // Form
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
+  title: { fontSize: 20, fontWeight: "800", color: "#1A1A1A" },
+  tabs: {
+    flexDirection: "row",
+    margin: 16,
     marginBottom: 8,
-  },
-  dropdown: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#EDE9FE",
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    padding: 4,
   },
-  dropdownText: {
-    fontSize: 15,
-    color: "#1A1A1A",
-  },
-  pickerList: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    overflow: "hidden",
-  },
-  pickerItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-  },
-  pickerItemText: {
-    fontSize: 15,
-    color: "#374151",
-  },
-  pickerItemActive: {
-    color: "#5B5BD6",
-    fontWeight: "600",
-  },
-  rowButtons: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  primaryBtn: {
+  tab: {
     flex: 1,
-    backgroundColor: "#5B5BD6",
-    borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
     alignItems: "center",
   },
-  primaryBtnText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  outlineBtn: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: "#5B5BD6",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-  },
-  outlineBtnFull: {
-    borderWidth: 1.5,
-    borderColor: "#5B5BD6",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-  },
-  outlineBtnText: {
-    color: "#5B5BD6",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  tabOn: { backgroundColor: "#5B5BD6" },
+  tabText: { fontWeight: "700", color: "#5B5BD6", fontSize: 13 },
+  tabTextOn: { color: "#FFF" },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-  },
-  searchInputWrap: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    paddingHorizontal: 12,
-    height: 48,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-    color: "#1A1A1A",
-  },
-  filterIconBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  // List
-  resultCount: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginBottom: 14,
-  },
-  courseCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  courseInfo: {
-    flex: 1,
-  },
-  courseName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 2,
-  },
-  courseCode: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginBottom: 4,
-  },
-  courseMeta: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginBottom: 2,
-  },
-  slotsText: {
-    fontSize: 13,
-    color: "#5B5BD6",
-    fontWeight: "600",
-    marginTop: 4,
-  },
-  registerBtn: {
-    backgroundColor: "#5B5BD6",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  registerBtnText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  // Confirm
-  confirmCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#E5E7EB",
-    marginVertical: 14,
-  },
-  scheduleTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 6,
-  },
-  slotsBox: {
-    marginTop: 14,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
-  },
-  slotsBoxText: {
-    fontSize: 14,
-    color: "#374151",
-  },
-  warningBox: {
-    flexDirection: "row",
-    backgroundColor: "#FEF3C7",
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 16,
-    gap: 10,
-    alignItems: "flex-start",
-  },
-  warningText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#92400E",
-    lineHeight: 19,
-  },
-
-  // Success
-  successContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  successIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: "#10B981",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  successTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1A1A1A",
+    marginHorizontal: 16,
     marginBottom: 8,
-  },
-  successSubtitle: {
-    fontSize: 15,
-    color: "#6B7280",
-    textAlign: "center",
-  },
-  successCourse: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1A1A1A",
-    marginTop: 16,
-    textAlign: "center",
-  },
-
-  // Registered
-  summaryText: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  registeredCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  registeredBadge: {
-    backgroundColor: "#D1FAE5",
+    backgroundColor: "#FFF",
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    height: 44,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
-  registeredBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#059669",
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 15 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  empty: {
+    textAlign: "center",
+    color: "#9CA3AF",
+    marginTop: 40,
+    paddingHorizontal: 24,
   },
+  hint: {
+    fontSize: 12.5,
+    color: "#5B5BD6",
+    backgroundColor: "#EDE9FE",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+  },
+  code: { fontSize: 13, fontWeight: "700", color: "#5B5BD6" },
+  name: { fontSize: 16, fontWeight: "700", color: "#1A1A1A", marginTop: 4 },
+  meta: { fontSize: 12, color: "#6B7280", marginTop: 4 },
+  slots: { fontSize: 12, fontWeight: "600", color: "#374151", marginTop: 8 },
+  btn: {
+    marginTop: 12,
+    backgroundColor: "#5B5BD6",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  btnDisabled: { backgroundColor: "#C4B5FD" },
+  btnText: { color: "#FFF", fontWeight: "700" },
+  rowBetween: { flexDirection: "row", alignItems: "flex-start" },
+  badge: {
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeText: { color: "#059669", fontWeight: "700", fontSize: 12 },
+  cancelBtn: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  cancelText: { color: "#EF4444", fontWeight: "700" },
 });

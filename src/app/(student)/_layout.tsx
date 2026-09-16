@@ -60,10 +60,10 @@ export default function StudentLayout() {
       <Tabs.Screen
         name="RegisterCourses"
         options={{
-          title: "Lớp học",
+          title: "Đăng ký",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? "people" : "people-outline"}
+              name={focused ? "school" : "school-outline"}
               size={24}
               color={color}
             />
@@ -85,7 +85,6 @@ export default function StudentLayout() {
         }}
       />
 
-      {/* Hidden routes — chỉ mở bằng navigate, không hiện tab */}
       <Tabs.Screen name="Notification" options={{ href: null }} />
       <Tabs.Screen name="QrAttendance" options={{ href: null }} />
       <Tabs.Screen name="ViewTranscript" options={{ href: null }} />
