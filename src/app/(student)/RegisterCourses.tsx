@@ -166,13 +166,7 @@ const RegisterCourses: React.FC = () => {
   }, [openList, search]);
 
   const isAlreadyRegistered = (courseId: number) =>
-    mine.some(
-      (m) =>
-        m.status !== "cancelled" &&
-        // match by name/code loosely if no courseId on mine
-        true,
-    ) &&
-    // better: check open list against mine course code
+    mine.some((m) => m.status !== "cancelled" && true) &&
     mine.some((m) => {
       const open = openList.find((o) => o.courseId === courseId);
       if (!open) return false;
@@ -389,7 +383,7 @@ const RegisterCourses: React.FC = () => {
           ListHeaderComponent={
             tab === "open" ? (
               <Text style={styles.hint}>
-                Bấm Đăng ký → lưu Enrollment vào DB → môn xuất hiện trong{" "}
+                Bấm Đăng ký → môn xuất hiện trong{" "}
                 <Text style={{ fontWeight: "800" }}>Xem lịch</Text>.
               </Text>
             ) : null

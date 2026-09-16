@@ -136,14 +136,12 @@ const MONTH_NAMES = [
   "Tháng 12",
 ];
 
-/** Chuẩn hoá day_of_week từ backend → key lịch (Sunday..Saturday) */
 const normalizeDayKey = (raw: any): string => {
   let s = String(raw ?? "")
     .trim()
     .toLowerCase()
     .normalize("NFC");
   if (!s) return "";
-  // bỏ dấu chấm/phẩy thừa
   s = s.replace(/[.,;]/g, " ").replace(/\s+/g, " ").trim();
 
   const map: Record<string, string> = {
@@ -202,7 +200,6 @@ const normalizeDayKey = (raw: any): string => {
   };
   if (map[s]) return map[s];
 
-  // startsWith: "monday...", "mon ", "thứ 2..."
   if (s.startsWith("mon") || s.includes("thứ 2") || s.includes("thu 2"))
     return "Monday";
   if (s.startsWith("tue") || s.includes("thứ 3") || s.includes("thu 3"))
@@ -222,12 +219,10 @@ const normalizeDayKey = (raw: any): string => {
   if (s.startsWith("sun") || s.includes("chủ nhật") || s === "cn")
     return "Sunday";
 
-  // số: 0-6 (CN=0) hoặc 1-7 (T2=1 ... CN=7)
   const n = Number(s);
   if (!Number.isNaN(n)) {
     if (n >= 0 && n <= 6) return DAY_KEYS[n];
     if (n >= 1 && n <= 7) {
-      // 1=Mon ... 6=Sat, 7=Sun
       return DAY_KEYS[n === 7 ? 0 : n];
     }
   }
@@ -285,7 +280,6 @@ const mapScheduleRow = (item: any, index: number): ScheduleItem | null => {
   };
 };
 
-/** Cache lịch trong RAM — mở lại tab không gọi API lại ngay */
 const SCHEDULE_CACHE_TTL_MS = 60_000;
 let scheduleCache: {
   tokenKey: string;
