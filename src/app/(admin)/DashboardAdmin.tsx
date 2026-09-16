@@ -2,7 +2,7 @@ import { logoutAPI } from "@/src/api/authApi";
 import apiClient from "@/src/api/axios";
 import { useAuth } from "@/src/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -32,24 +32,69 @@ const DashboardAdmin = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      // Thử cả 2 endpoint phổ biến để khớp backend
+      // Backend: DashboardAdmin → pendingClassOffers, newNotifications, totalClasses
       let data: any = null;
-      try {
-        const res = await apiClient.get("/dashboard/admin");
-        data = res.data?.data || res.data;
-      } catch {
-        const res = await apiClient.get("/admin/dashboard-stats");
-        data = res.data?.data || res.data;
+      for (const url of [
+        "/dashboard/admin",
+        "/admin/dashboard",
+        "/admin/dashboard-stats",
+      ]) {
+        try {
+          const res = await apiClient.get(url);
+          data = res.data?.data ?? res.data;
+          if (data) break;
+        } catch {
+          /* try next */
+        }
       }
-      if (data) {
-        setStats({
-          totalClasses: Number(data.totalClasses ?? data.total_classes ?? 0),
-          pendingAssign: Number(data.pendingAssign ?? data.pending_assign ?? 0),
-          newNotifications: Number(
-            data.newNotifications ?? data.new_notifications ?? 0,
-          ),
-        });
+
+      let totalClasses = Number(data?.totalClasses ?? data?.total_classes ?? 0);
+      let pendingAssign = Number(
+        data?.pendingClassOffers ??
+          data?.pending_class_offers ??
+          data?.pendingAssign ??
+          data?.pending_assign ??
+          0,
+      );
+      let newNotifications = Number(
+        data?.newNotifications ?? data?.new_notifications ?? 0,
+      );
+
+      // Fallback đếm trực tiếp nếu dashboard không có / thiếu số
+      if (!data || (!totalClasses && !pendingAssign && !newNotifications)) {
+        try {
+          const [cRes, oRes, nRes] = await Promise.all([
+            apiClient.get("/classes").catch(() => null),
+            apiClient
+              .get("/class-offers", { params: { status: "pending" } })
+              .catch(() => null),
+            apiClient.get("/notifications").catch(() => null),
+          ]);
+          const classes = cRes?.data?.data ?? [];
+          if (Array.isArray(classes)) totalClasses = classes.length;
+
+          const offers = oRes?.data?.data ?? [];
+          if (Array.isArray(offers)) {
+            pendingAssign = offers.filter(
+              (o: any) =>
+                String(o.Status ?? o.status ?? "").toLowerCase() === "pending",
+            ).length;
+          }
+
+          const notis = nRes?.data?.data ?? [];
+          if (Array.isArray(notis)) {
+            const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            newNotifications = notis.filter((n: any) => {
+              const t = new Date(n.CreatedAt ?? n.createdAt ?? 0).getTime();
+              return !t || t >= weekAgo;
+            }).length;
+          }
+        } catch (e) {
+          console.log("stats fallback error", e);
+        }
       }
+
+      setStats({ totalClasses, pendingAssign, newNotifications });
     } catch (e) {
       console.log("Dashboard stats error:", e);
     }
@@ -62,6 +107,13 @@ const DashboardAdmin = () => {
       setLoading(false);
     })();
   }, [fetchStats]);
+
+  // Đồng bộ lại khi quay về dashboard
+  useFocusEffect(
+    useCallback(() => {
+      fetchStats();
+    }, [fetchStats]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -140,7 +192,12 @@ const DashboardAdmin = () => {
   ];
 
   const goTo = (route: string) => {
-    router.push(route as any);
+    try {
+      router.push(route as any);
+    } catch (e) {
+      console.log("navigate error", route, e);
+      Alert.alert("Điều hướng", `Không mở được: ${route}`);
+    }
   };
 
   const handleLogout = () => {
@@ -194,6 +251,7 @@ const DashboardAdmin = () => {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -204,24 +262,43 @@ const DashboardAdmin = () => {
         }>
         <HomeScreen role="admin" embedded />
 
-        <View style={styles.statCard}>
+        {/* 3 thẻ thống kê — cùng pattern TouchableOpacity như nút Quản lý nhanh */}
+        <TouchableOpacity
+          style={styles.statCard}
+          activeOpacity={0.7}
+          onPress={() => goTo("/(admin)/ClassList")}>
           <Text style={styles.statLabel}>Tổng lớp học</Text>
-          <Text style={styles.statValue}>{stats.totalClasses}</Text>
-        </View>
+          <View style={styles.statRow}>
+            <Text style={styles.statValue}>{stats.totalClasses}</Text>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </View>
+        </TouchableOpacity>
 
-        <View style={styles.statCard}>
+        <TouchableOpacity
+          style={styles.statCard}
+          activeOpacity={0.7}
+          onPress={() => goTo("/(admin)/AssignTeacher")}>
           <Text style={styles.statLabel}>Lớp chờ phân công</Text>
-          <Text style={[styles.statValue, { color: "#F97316" }]}>
-            {stats.pendingAssign}
-          </Text>
-        </View>
+          <View style={styles.statRow}>
+            <Text style={[styles.statValue, { color: "#F97316" }]}>
+              {stats.pendingAssign}
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </View>
+        </TouchableOpacity>
 
-        <View style={styles.statCard}>
+        <TouchableOpacity
+          style={styles.statCard}
+          activeOpacity={0.7}
+          onPress={() => goTo("/(admin)/NotificationList")}>
           <Text style={styles.statLabel}>Thông báo mới</Text>
-          <Text style={[styles.statValue, { color: "#2563EB" }]}>
-            {stats.newNotifications}
-          </Text>
-        </View>
+          <View style={styles.statRow}>
+            <Text style={[styles.statValue, { color: "#2563EB" }]}>
+              {stats.newNotifications}
+            </Text>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </View>
+        </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>Quản lý nhanh</Text>
         {quickActions.map((item) => (
@@ -320,6 +397,10 @@ const styles = StyleSheet.create({
   },
 
   // Stats
+  statRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   statCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -331,6 +412,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
+  },
+  statHint: {
+    fontSize: 12,
+    color: "#5B5BD6",
+    marginTop: 6,
+    fontWeight: "600",
   },
   statLabel: {
     fontSize: 14,

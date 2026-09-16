@@ -1,6 +1,6 @@
 import apiClient from "@/src/api/axios";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -30,11 +30,17 @@ type UserItem = {
 
 const Users: React.FC = () => {
   const router = useRouter();
+  const params = useLocalSearchParams<{ role?: string }>();
+  const initialRole = ((): RoleFilter => {
+    const r = String(params.role || "").toLowerCase();
+    if (r === "student" || r === "teacher") return r;
+    return "all";
+  })();
   const [items, setItems] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [role, setRole] = useState<RoleFilter>("all");
+  const [role, setRole] = useState<RoleFilter>(initialRole);
 
   const load = useCallback(async () => {
     try {
@@ -93,9 +99,14 @@ const Users: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
+      const r = String(params.role || "").toLowerCase();
+      if (r === "student" || r === "teacher") setRole(r);
+      else if (!params.role) {
+        /* giữ filter hiện tại nếu không truyền param */
+      }
       setLoading(true);
       load();
-    }, [load]),
+    }, [load, params.role]),
   );
 
   const filtered = useMemo(() => {
@@ -132,11 +143,17 @@ const Users: React.FC = () => {
             load();
           } catch (e: any) {
             const d = e?.response?.data;
-            Alert.alert(
-              "Lỗi",
+            const detail = String(d?.error || "");
+            let msg =
               [d?.message, d?.error].filter(Boolean).join("\n") ||
-                "Xóa thất bại.",
-            );
+              "Xóa thất bại.";
+            if (/1451|foreign key|FOREIGN KEY/i.test(detail)) {
+              msg =
+                "Không xóa được vì còn dữ liệu liên quan (thông báo / lớp / phân công).\n" +
+                "Khởi động lại backend (đã cập nhật xóa notification) rồi thử lại.\n\n" +
+                detail;
+            }
+            Alert.alert("Lỗi", msg);
           }
         },
       },
@@ -180,7 +197,13 @@ const Users: React.FC = () => {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Text style={styles.title}>Người dùng</Text>
+        <Text style={styles.title}>
+          {role === "student"
+            ? "Sinh viên"
+            : role === "teacher"
+              ? "Giảng viên"
+              : "Người dùng"}
+        </Text>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.addBtn}

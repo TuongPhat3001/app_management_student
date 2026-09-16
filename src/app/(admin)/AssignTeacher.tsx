@@ -259,8 +259,8 @@ const AssignTeacher: React.FC = () => {
           <View style={styles.banner}>
             <Ionicons name="information-circle" size={20} color="#5B5BD6" />
             <Text style={styles.bannerText}>
-              Tạo lời mời phân công (class-offers). GV nhận ngay trong Đề xuất
-              lớp và chuông thông báo.
+              Tạo lời mời phân công. GV nhận ngay trong Đề xuất lớp và chuông
+              thông báo.
             </Text>
           </View>
 
