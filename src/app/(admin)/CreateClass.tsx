@@ -1,11 +1,13 @@
 import apiClient from "@/src/api/axios";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -17,166 +19,220 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-interface CreateClassForm {
-  classCode: string;
-  className: string;
-  courseId: string;
-  majorId: string;
-  semesterId: string;
-  roomId: string;
-  capacity: string;
-  teacherId: string;
-  academicYear: string;
-}
+/**
+ * POST /classes
+ * CreateClassRequest:
+ *   majorId*, semesterId*, roomId*
+ *   classCode? (auto), teacherId?, maxStudents?, status?, schedules?
+ */
+
+type MetaItem = { id: number; label: string };
+type PickerKind = "major" | "semester" | "room" | "teacher" | null;
 
 const CreateClass: React.FC = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [createdClassId, setCreatedClassId] = useState<number | null>(null);
-  const [formData, setFormData] = useState<CreateClassForm>({
-    classCode: "",
-    className: "",
-    courseId: "",
-    majorId: "",
-    semesterId: "",
-    roomId: "",
-    capacity: "",
-    teacherId: "",
-    academicYear: "",
-  });
+  const [majors, setMajors] = useState<MetaItem[]>([]);
+  const [semesters, setSemesters] = useState<MetaItem[]>([]);
+  const [rooms, setRooms] = useState<MetaItem[]>([]);
+  const [teachers, setTeachers] = useState<MetaItem[]>([]);
+  const [picker, setPicker] = useState<PickerKind>(null);
 
-  const handleChange = (field: keyof CreateClassForm, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
+  const [major, setMajor] = useState<MetaItem | null>(null);
+  const [semester, setSemester] = useState<MetaItem | null>(null);
+  const [room, setRoom] = useState<MetaItem | null>(null);
+  const [teacher, setTeacher] = useState<MetaItem | null>(null);
+  const [maxStudents, setMaxStudents] = useState("40");
+  const [createdCode, setCreatedCode] = useState("");
 
-  const requireNumber = (value: string, label: string) => {
-    if (!value.trim() || isNaN(Number(value)) || Number(value) <= 0) {
-      Alert.alert("Thông báo", `${label} phải là số > 0.`);
-      return false;
-    }
-    return true;
-  };
-
-  const validate = () => {
-    if (!formData.classCode.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập mã lớp.");
-      return false;
-    }
-    if (!formData.className.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập tên lớp.");
-      return false;
-    }
-    if (!requireNumber(formData.majorId, "ID ngành (majorId)")) return false;
-    if (!requireNumber(formData.semesterId, "ID học kỳ (semesterId)"))
-      return false;
-    if (!requireNumber(formData.roomId, "ID phòng (roomId)")) return false;
-
-    if (formData.courseId.trim() && isNaN(Number(formData.courseId))) {
-      Alert.alert("Thông báo", "ID môn học phải là số.");
-      return false;
-    }
-    if (formData.capacity.trim()) {
-      if (isNaN(Number(formData.capacity)) || Number(formData.capacity) <= 0) {
-        Alert.alert("Thông báo", "Sức chứa phải là số > 0.");
-        return false;
+  const loadMeta = useCallback(async () => {
+    try {
+      const res = await apiClient.get("/metadata");
+      const d = res.data?.data ?? {};
+      setMajors(
+        (d.majors || [])
+          .map((m: any) => ({
+            id: Number(m.ID ?? m.id),
+            label: String(m.Name ?? m.name ?? m.Code ?? m.code ?? ""),
+          }))
+          .filter((x: MetaItem) => x.id > 0),
+      );
+      setSemesters(
+        (d.semesters || [])
+          .map((s: any) => ({
+            id: Number(s.ID ?? s.id),
+            label: String(s.Name ?? s.name ?? `HK ${s.ID ?? s.id}`),
+          }))
+          .filter((x: MetaItem) => x.id > 0),
+      );
+      setRooms(
+        (d.rooms || [])
+          .map((r: any) => ({
+            id: Number(r.ID ?? r.id),
+            label: String(r.Name ?? r.name ?? r.Code ?? r.code ?? `P${r.ID}`),
+          }))
+          .filter((x: MetaItem) => x.id > 0),
+      );
+      setTeachers(
+        (d.teachers || [])
+          .map((t: any) => {
+            const id = Number(t.ID ?? t.id);
+            const name =
+              t.User?.FullName ??
+              t.User?.fullName ??
+              t.fullName ??
+              t.TeacherCode ??
+              t.teacherCode ??
+              `GV #${id}`;
+            const code = t.TeacherCode ?? t.teacherCode ?? "";
+            return {
+              id,
+              label: code ? `${name} (${code})` : String(name),
+            };
+          })
+          .filter((x: MetaItem) => x.id > 0),
+      );
+    } catch {
+      // fallback separate endpoints
+      try {
+        const [cRes, tRes] = await Promise.all([
+          apiClient.get("/classes").catch(() => null),
+          apiClient.get("/teachers").catch(() => null),
+        ]);
+        void cRes;
+        const tRaw = tRes?.data?.data ?? [];
+        setTeachers(
+          (Array.isArray(tRaw) ? tRaw : [])
+            .map((t: any) => ({
+              id: Number(t.ID ?? t.id),
+              label: String(
+                t.User?.FullName ?? t.User?.fullName ?? t.TeacherCode ?? t.id,
+              ),
+            }))
+            .filter((x: MetaItem) => x.id > 0),
+        );
+      } catch {
+        /* ignore */
       }
     }
-    if (formData.teacherId.trim() && isNaN(Number(formData.teacherId))) {
-      Alert.alert("Thông báo", "ID giảng viên phải là số.");
-      return false;
-    }
-    return true;
-  };
+  }, []);
+
+  useEffect(() => {
+    loadMeta();
+  }, [loadMeta]);
 
   const handleSubmit = async () => {
-    if (!validate()) return;
+    if (!major) {
+      Alert.alert("Thiếu thông tin", "Chọn chuyên ngành (majorId).");
+      return;
+    }
+    if (!semester) {
+      Alert.alert("Thiếu thông tin", "Chọn học kỳ (semesterId).");
+      return;
+    }
+    if (!room) {
+      Alert.alert("Thiếu thông tin", "Chọn phòng (roomId).");
+      return;
+    }
+    const max = Number(maxStudents) || 0;
+    if (max < 0) {
+      Alert.alert("Sai", "Sĩ số tối đa không hợp lệ.");
+      return;
+    }
+
+    const payload: Record<string, any> = {
+      majorId: major.id,
+      semesterId: semester.id,
+      roomId: room.id,
+      maxStudents: max,
+      status: "open",
+    };
+    if (teacher) payload.teacherId = teacher.id;
 
     setLoading(true);
-    setSuccess(false);
-    setCreatedClassId(null);
-
-    const majorId = Number(formData.majorId);
-    const semesterId = Number(formData.semesterId);
-    const roomId = Number(formData.roomId);
-
-    // Gửi cả majorId / majorID để khớp json tag backend
-    const payload: Record<string, any> = {
-      classCode: formData.classCode.trim(),
-      className: formData.className.trim(),
-      majorId,
-      semesterId,
-      roomId,
-      majorID: majorId,
-      semesterID: semesterId,
-      roomID: roomId,
-    };
-
-    if (formData.courseId.trim()) {
-      const courseId = Number(formData.courseId);
-      payload.courseId = courseId;
-      payload.courseID = courseId;
-    }
-    if (formData.capacity.trim()) {
-      payload.capacity = Number(formData.capacity);
-    }
-    if (formData.teacherId.trim()) {
-      const teacherId = Number(formData.teacherId);
-      payload.teacherId = teacherId;
-      payload.teacherID = teacherId;
-    }
-    if (formData.academicYear.trim()) {
-      payload.academicYear = formData.academicYear.trim();
-    }
-
+    setCreatedCode("");
     try {
       const res = await apiClient.post("/classes", payload);
-      const data = res.data?.data || res.data;
-
-      setSuccess(true);
-      setCreatedClassId(data?.ID || data?.id || data?.Id || null);
-
-      Alert.alert("Thành công", "Tạo lớp học thành công!");
-
-      setFormData({
-        classCode: "",
-        className: "",
-        courseId: "",
-        majorId: "",
-        semesterId: "",
-        roomId: "",
-        capacity: "",
-        teacherId: "",
-        academicYear: "",
-      });
-    } catch (error: any) {
-      const data = error?.response?.data;
-      let message = data?.message || data?.error || "Không thể tạo lớp học.";
-
-      if (data?.error && typeof data.error === "string") {
-        message = `${data.message || "Lỗi"}\n${data.error}`;
-      } else if (error?.response?.status === 401) {
-        message = "Bạn chưa đăng nhập hoặc hết phiên.";
-      } else if (error?.response?.status === 404) {
-        message =
-          "Không tìm thấy ngành / học kỳ / phòng / môn học với ID đã nhập.";
-      }
-
-      Alert.alert("Lỗi", message);
+      const data = res.data?.data;
+      const cls = data?.class ?? data;
+      const code =
+        cls?.ClassCode ?? cls?.classCode ?? res.data?.message ?? "OK";
+      setCreatedCode(String(code));
+      Alert.alert(
+        "Thành công",
+        res.data?.message || `Tạo lớp thành công: ${code}`,
+      );
+      setMajor(null);
+      setSemester(null);
+      setRoom(null);
+      setTeacher(null);
+      setMaxStudents("40");
+    } catch (e: any) {
+      const d = e?.response?.data;
+      Alert.alert(
+        "Lỗi",
+        [d?.message, d?.error].filter(Boolean).join("\n") ||
+          "Tạo lớp thất bại.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  const pickerData =
+    picker === "major"
+      ? majors
+      : picker === "semester"
+        ? semesters
+        : picker === "room"
+          ? rooms
+          : picker === "teacher"
+            ? teachers
+            : [];
+
+  const selectLabel =
+    picker === "major"
+      ? "Chuyên ngành"
+      : picker === "semester"
+        ? "Học kỳ"
+        : picker === "room"
+          ? "Phòng"
+          : "Giảng viên";
+
+  const Field = ({
+    label,
+    value,
+    onPress,
+    required,
+  }: {
+    label: string;
+    value?: string;
+    onPress: () => void;
+    required?: boolean;
+  }) => (
+    <>
+      <Text style={styles.label}>
+        {label}
+        {required ? " *" : ""}
+      </Text>
+      <TouchableOpacity style={styles.select} onPress={onPress}>
+        <Text style={value ? styles.selectValue : styles.selectPlaceholder}>
+          {value || `Chọn ${label.toLowerCase()}...`}
+        </Text>
+        <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+      </TouchableOpacity>
+    </>
+  );
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+          <Ionicons name="arrow-back" size={22} color="#1A1A1A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tạo lớp học mới</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={styles.title}>Tạo lớp học mới</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <KeyboardAvoidingView
@@ -185,139 +241,104 @@ const CreateClass: React.FC = () => {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled">
-          <Text style={styles.sectionLabel}>Thông tin lớp</Text>
+          <Text style={styles.hint}>
+            Backend tự sinh mã lớp. Bắt buộc: chuyên ngành, học kỳ, phòng.
+          </Text>
 
-          <Text style={styles.label}>Mã lớp *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: CSDL-202-01"
-            placeholderTextColor="#9CA3AF"
-            value={formData.classCode}
-            onChangeText={(t) => handleChange("classCode", t)}
-            autoCapitalize="characters"
+          <Field
+            label="Chuyên ngành (majorId)"
+            value={major?.label}
+            required
+            onPress={() => setPicker("major")}
+          />
+          <Field
+            label="Học kỳ (semesterId)"
+            value={semester?.label}
+            required
+            onPress={() => setPicker("semester")}
+          />
+          <Field
+            label="Phòng (roomId)"
+            value={room?.label}
+            required
+            onPress={() => setPicker("room")}
+          />
+          <Field
+            label="Giảng viên (teacherId)"
+            value={teacher?.label}
+            onPress={() => setPicker("teacher")}
           />
 
-          <Text style={styles.label}>Tên lớp *</Text>
+          <Text style={styles.label}>Sĩ số tối đa (maxStudents)</Text>
           <TextInput
             style={styles.input}
-            placeholder="VD: Database Systems"
-            placeholderTextColor="#9CA3AF"
-            value={formData.className}
-            onChangeText={(t) => handleChange("className", t)}
-          />
-
-          <Text style={styles.sectionLabel}>ID bắt buộc</Text>
-
-          <Text style={styles.label}>ID ngành*</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="ID ngành trong DB (số)"
-            placeholderTextColor="#9CA3AF"
+            value={maxStudents}
+            onChangeText={setMaxStudents}
             keyboardType="numeric"
-            value={formData.majorId}
-            onChangeText={(t) => handleChange("majorId", t)}
-          />
-
-          <Text style={styles.label}>ID học kỳ*</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="ID học kỳ trong DB (số)"
+            placeholder="40"
             placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            value={formData.semesterId}
-            onChangeText={(t) => handleChange("semesterId", t)}
           />
 
-          <Text style={styles.label}>ID phòng học*</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="ID phòng trong DB (số)"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            value={formData.roomId}
-            onChangeText={(t) => handleChange("roomId", t)}
-          />
-
-          <Text style={styles.sectionLabel}>Thông tin thêm</Text>
-
-          <Text style={styles.label}>ID môn học</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="ID môn học (số)"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            value={formData.courseId}
-            onChangeText={(t) => handleChange("courseId", t)}
-          />
-
-          <Text style={styles.label}>Năm học</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: 2025-2026"
-            placeholderTextColor="#9CA3AF"
-            value={formData.academicYear}
-            onChangeText={(t) => handleChange("academicYear", t)}
-          />
-
-          <Text style={styles.label}>Sức chứa</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: 40"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            value={formData.capacity}
-            onChangeText={(t) => handleChange("capacity", t)}
-          />
-
-          <Text style={styles.label}>ID giảng viên</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Để trống nếu phân công sau"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
-            value={formData.teacherId}
-            onChangeText={(t) => handleChange("teacherId", t)}
-          />
-
-          <TouchableOpacity
-            style={[styles.button, loading && { opacity: 0.7 }]}
-            onPress={handleSubmit}
-            disabled={loading}
-            activeOpacity={0.8}>
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Tạo lớp học</Text>
-            )}
-          </TouchableOpacity>
-
-          {success && (
-            <View style={styles.resultBox}>
-              <View style={styles.resultHeader}>
-                <Ionicons name="checkmark-circle" size={22} color="#059669" />
-                <Text style={styles.resultTitle}>Lớp học đã được lưu</Text>
-              </View>
-              {createdClassId ? (
-                <Text style={styles.resultText}>
-                  ID lớp:{" "}
-                  <Text style={styles.resultBold}>{createdClassId}</Text>
-                  {"\n"}
-                  Dùng ID này làm classId khi tạo sinh viên.
-                </Text>
-              ) : (
-                <Text style={styles.resultHint}>
-                  Lấy ID lớp từ danh sách lớp để gán khi tạo sinh viên.
-                </Text>
-              )}
-              <TouchableOpacity
-                style={styles.linkBtn}
-                onPress={() => router.push("/(admin)/AssignTeacher" as any)}>
-                <Text style={styles.linkText}>Đi phân công giảng viên →</Text>
-              </TouchableOpacity>
+          {!!createdCode && (
+            <View style={styles.result}>
+              <Text style={styles.resultTitle}>Đã tạo lớp</Text>
+              <Text>{createdCode}</Text>
             </View>
           )}
+
+          <TouchableOpacity
+            style={[styles.btn, loading && { opacity: 0.7 }]}
+            onPress={handleSubmit}
+            disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.btnText}>Tạo lớp</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={!!picker} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>{selectLabel}</Text>
+              <TouchableOpacity onPress={() => setPicker(null)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={pickerData}
+              keyExtractor={(i) => String(i.id)}
+              ListEmptyComponent={
+                <Text
+                  style={{
+                    textAlign: "center",
+                    color: "#9CA3AF",
+                    padding: 24,
+                  }}>
+                  Không có dữ liệu từ /metadata
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    if (picker === "major") setMajor(item);
+                    if (picker === "semester") setSemester(item);
+                    if (picker === "room") setRoom(item);
+                    if (picker === "teacher") setTeacher(item);
+                    setPicker(null);
+                  }}>
+                  <Text style={styles.pickerMain}>{item.label}</Text>
+                  <Text style={styles.pickerSub}>ID: {item.id}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -325,78 +346,97 @@ const CreateClass: React.FC = () => {
 export default CreateClass;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
+  safe: { flex: 1, backgroundColor: "#F3EEFF" },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
+    padding: 12,
+    backgroundColor: "#FFF",
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  backBtn: { width: 40, height: 40, justifyContent: "center" },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#1A1A1A",
+  back: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  headerSpacer: { width: 40 },
+  title: { flex: 1, textAlign: "center", fontSize: 17, fontWeight: "700" },
   scroll: { padding: 20, paddingBottom: 40 },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
+  hint: {
+    fontSize: 12.5,
     color: "#5B5BD6",
-    marginBottom: 12,
-    marginTop: 4,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    backgroundColor: "#EDE9FE",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+    lineHeight: 18,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
-  },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 },
   input: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFF",
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 13,
-    marginBottom: 16,
+    paddingVertical: 12,
+    marginBottom: 14,
     fontSize: 15,
-    color: "#1A1A1A",
   },
-  button: {
+  select: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 14,
+  },
+  selectValue: { flex: 1, fontSize: 15, color: "#1A1A1A" },
+  selectPlaceholder: { flex: 1, fontSize: 15, color: "#9CA3AF" },
+  result: {
+    backgroundColor: "#D1FAE5",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  resultTitle: { fontWeight: "700", color: "#059669", marginBottom: 4 },
+  btn: {
     backgroundColor: "#5B5BD6",
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
-    marginTop: 8,
   },
-  buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
-  resultBox: {
-    marginTop: 24,
-    backgroundColor: "#ECFDF5",
-    borderWidth: 1,
-    borderColor: "#A7F3D0",
-    borderRadius: 14,
-    padding: 16,
+  btnText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
   },
-  resultHeader: {
+  modal: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "70%",
+    paddingBottom: 24,
+  },
+  modalHead: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
   },
-  resultTitle: { fontSize: 16, fontWeight: "700", color: "#065F46" },
-  resultText: { fontSize: 13, color: "#374151", lineHeight: 20 },
-  resultBold: { fontWeight: "700", color: "#111827" },
-  resultHint: { fontSize: 13, color: "#374151", lineHeight: 20 },
-  linkBtn: { marginTop: 10 },
-  linkText: { fontSize: 14, fontWeight: "600", color: "#5B5BD6" },
+  modalTitle: { fontSize: 16, fontWeight: "700" },
+  pickerRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  pickerMain: { fontSize: 15, fontWeight: "600" },
+  pickerSub: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
 });

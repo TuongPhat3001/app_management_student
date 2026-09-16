@@ -1,11 +1,13 @@
 import apiClient from "@/src/api/axios";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -17,164 +19,163 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-interface StudentForm {
-  username: string;
-  password: string;
-  email: string;
-  fullName: string;
-  studentCode: string;
-  classId: string;
-  dateOfBirth: string;
-  gender: string;
-  phone: string;
-  address: string;
-  enrollmentDate: string;
-}
+/**
+ * POST /students
+ * CreateStudentRequest:
+ *   username*, fullName*, classId*
+ *   password?, email?, studentCode? (backend tự sinh), dateOfBirth?, gender?, phone?, address?, enrollmentDate?, status?
+ */
 
-interface CreatedResult {
-  studentCode?: string;
-  email?: string;
-  username?: string;
-  defaultPassword?: string;
-  fullName?: string;
-}
+type ClassItem = { id: number; label: string };
 
 const CreateIdStudent: React.FC = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<StudentForm>({
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
+  const [form, setForm] = useState({
     username: "",
     password: "",
     email: "",
     fullName: "",
-    studentCode: "",
-    classId: "",
     dateOfBirth: "",
     gender: "",
     phone: "",
     address: "",
     enrollmentDate: "",
   });
-  const [createdInfo, setCreatedInfo] = useState<CreatedResult | null>(null);
+  const [created, setCreated] = useState<{
+    studentCode?: string;
+    username?: string;
+    defaultPassword?: string;
+  } | null>(null);
 
-  const handleChange = (field: keyof StudentForm, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
+  const set = (k: keyof typeof form, v: string) =>
+    setForm((p) => ({ ...p, [k]: v }));
 
-  const validate = () => {
-    if (!formData.username.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập tên đăng nhập (username).");
-      return false;
+  const loadClasses = useCallback(async () => {
+    try {
+      const res = await apiClient.get("/classes");
+      const raw = res.data?.data ?? res.data ?? [];
+      const list = (Array.isArray(raw) ? raw : [])
+        .map((c: any) => {
+          const id = Number(c.ID ?? c.id);
+          if (!id) return null;
+          const code = String(c.ClassCode ?? c.classCode ?? id);
+          const major = c.Major?.Name ?? c.Major?.name ?? c.major?.name ?? "";
+          return {
+            id,
+            label: major ? `${code} · ${major}` : code,
+          };
+        })
+        .filter(Boolean) as ClassItem[];
+      setClasses(list);
+    } catch {
+      setClasses([]);
     }
-    if (!formData.fullName.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập họ và tên.");
-      return false;
-    }
-    if (!formData.studentCode.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập mã sinh viên.");
-      return false;
-    }
-    if (!formData.classId.trim() || isNaN(Number(formData.classId))) {
-      Alert.alert("Thông báo", "Vui lòng nhập ID lớp học (số).");
-      return false;
-    }
-    if (formData.password.trim() && formData.password.trim().length < 6) {
-      Alert.alert("Thông báo", "Mật khẩu phải có ít nhất 6 ký tự.");
-      return false;
-    }
-    if (formData.dateOfBirth.trim()) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(formData.dateOfBirth.trim())) {
-        Alert.alert("Thông báo", "Ngày sinh phải đúng YYYY-MM-DD.");
-        return false;
-      }
-    }
-    if (formData.enrollmentDate.trim()) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(formData.enrollmentDate.trim())) {
-        Alert.alert("Thông báo", "Ngày nhập học phải đúng YYYY-MM-DD.");
-        return false;
-      }
-    }
-    return true;
-  };
+  }, []);
+
+  useEffect(() => {
+    loadClasses();
+  }, [loadClasses]);
 
   const handleSubmit = async () => {
-    if (!validate()) return;
-
-    setLoading(true);
-    setCreatedInfo(null);
+    if (!form.username.trim()) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập username.");
+      return;
+    }
+    if (!form.fullName.trim()) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập họ tên.");
+      return;
+    }
+    if (!selectedClass) {
+      Alert.alert("Thiếu thông tin", "Vui lòng chọn lớp (classId).");
+      return;
+    }
+    if (form.password.trim() && form.password.trim().length < 6) {
+      Alert.alert("Sai", "Mật khẩu tối thiểu 6 ký tự.");
+      return;
+    }
+    if (
+      form.dateOfBirth.trim() &&
+      !/^\d{4}-\d{2}-\d{2}$/.test(form.dateOfBirth.trim())
+    ) {
+      Alert.alert("Sai", "Ngày sinh YYYY-MM-DD.");
+      return;
+    }
+    if (
+      form.enrollmentDate.trim() &&
+      !/^\d{4}-\d{2}-\d{2}$/.test(form.enrollmentDate.trim())
+    ) {
+      Alert.alert("Sai", "Ngày nhập học YYYY-MM-DD.");
+      return;
+    }
 
     const payload: Record<string, any> = {
-      username: formData.username.trim(),
-      fullName: formData.fullName.trim(),
-      studentCode: formData.studentCode.trim(),
-      classId: Number(formData.classId),
+      username: form.username.trim(),
+      fullName: form.fullName.trim(),
+      classId: selectedClass.id,
     };
+    if (form.password.trim()) payload.password = form.password.trim();
+    if (form.email.trim()) payload.email = form.email.trim();
+    if (form.dateOfBirth.trim()) payload.dateOfBirth = form.dateOfBirth.trim();
+    if (form.gender.trim()) payload.gender = form.gender.trim();
+    if (form.phone.trim()) payload.phone = form.phone.trim();
+    if (form.address.trim()) payload.address = form.address.trim();
+    if (form.enrollmentDate.trim())
+      payload.enrollmentDate = form.enrollmentDate.trim();
 
-    if (formData.password.trim()) payload.password = formData.password.trim();
-    if (formData.email.trim()) payload.email = formData.email.trim();
-    if (formData.dateOfBirth.trim())
-      payload.dateOfBirth = formData.dateOfBirth.trim();
-    if (formData.gender.trim()) payload.gender = formData.gender.trim();
-    if (formData.phone.trim()) payload.phone = formData.phone.trim();
-    if (formData.address.trim()) payload.address = formData.address.trim();
-    if (formData.enrollmentDate.trim())
-      payload.enrollmentDate = formData.enrollmentDate.trim();
-
+    setLoading(true);
+    setCreated(null);
     try {
       const res = await apiClient.post("/students", payload);
-      const data = res.data?.data || res.data;
-      const defaultPassword =
-        res.data?.defaultPassword || formData.password.trim() || "Student@123";
-
-      setCreatedInfo({
-        studentCode:
-          data?.StudentCode || data?.studentCode || formData.studentCode,
-        email:
-          data?.User?.Email ||
-          data?.User?.email ||
-          data?.email ||
-          formData.email,
-        username: formData.username,
-        fullName: formData.fullName,
-        defaultPassword,
+      const data = res.data?.data ?? {};
+      const code = data?.StudentCode ?? data?.studentCode ?? "";
+      const pwd =
+        res.data?.defaultPassword || form.password.trim() || "Student@123";
+      setCreated({
+        studentCode: code,
+        username: form.username.trim(),
+        defaultPassword: pwd,
       });
-
-      Alert.alert("Thành công", "Tạo sinh viên thành công!");
-
-      setFormData({
+      Alert.alert(
+        "Thành công",
+        res.data?.message || `Tạo SV thành công. Mã: ${code}`,
+      );
+      setForm({
         username: "",
         password: "",
         email: "",
         fullName: "",
-        studentCode: "",
-        classId: "",
         dateOfBirth: "",
         gender: "",
         phone: "",
         address: "",
         enrollmentDate: "",
       });
-    } catch (error: any) {
-      const data = error?.response?.data;
-      let message = data?.message || data?.error || "Tạo sinh viên thất bại.";
-      if (data?.error && typeof data.error === "string") {
-        message = `${data.message || "Lỗi"}\n${data.error}`;
-      }
-      Alert.alert("Lỗi", message);
+      setSelectedClass(null);
+    } catch (e: any) {
+      const d = e?.response?.data;
+      Alert.alert(
+        "Lỗi",
+        [d?.message, d?.error].filter(Boolean).join("\n") ||
+          "Tạo sinh viên thất bại.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+          <Ionicons name="arrow-back" size={22} color="#1A1A1A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tạo sinh viên mới</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={styles.title}>Tạo sinh viên mới</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <KeyboardAvoidingView
@@ -183,193 +184,175 @@ const CreateIdStudent: React.FC = () => {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled">
-          <Text style={styles.sectionLabel}>Thông tin bắt buộc</Text>
+          <Text style={styles.hint}>
+            Backend tự sinh mã SV. Bắt buộc: username, họ tên, lớp.
+          </Text>
 
-          <Text style={styles.label}>Tên đăng nhập (username) *</Text>
+          <Text style={styles.label}>Username *</Text>
           <TextInput
             style={styles.input}
-            placeholder="VD: quang.tran"
-            placeholderTextColor="#9CA3AF"
-            value={formData.username}
-            onChangeText={(t) => handleChange("username", t)}
+            value={form.username}
+            onChangeText={(v) => set("username", v)}
             autoCapitalize="none"
-            autoCorrect={false}
+            placeholder="sv001"
+            placeholderTextColor="#9CA3AF"
           />
 
           <Text style={styles.label}>Họ và tên *</Text>
           <TextInput
             style={styles.input}
-            placeholder="VD: Trần Đăng Quang"
+            value={form.fullName}
+            onChangeText={(v) => set("fullName", v)}
+            placeholder="Nguyễn Văn A"
             placeholderTextColor="#9CA3AF"
-            value={formData.fullName}
-            onChangeText={(t) => handleChange("fullName", t)}
           />
 
-          <Text style={styles.label}>Mã sinh viên *</Text>
+          <Text style={styles.label}>Lớp (classId) *</Text>
+          <TouchableOpacity
+            style={styles.select}
+            onPress={() => setPickerOpen(true)}>
+            <Text
+              style={
+                selectedClass ? styles.selectValue : styles.selectPlaceholder
+              }>
+              {selectedClass ? selectedClass.label : "Chọn lớp..."}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+
+          <Text style={styles.label}>Mật khẩu (mặc định Student@123)</Text>
           <TextInput
             style={styles.input}
-            placeholder="VD: 20260001"
-            placeholderTextColor="#9CA3AF"
-            value={formData.studentCode}
-            onChangeText={(t) => handleChange("studentCode", t)}
-            autoCapitalize="characters"
-          />
-
-          <Text style={styles.label}>ID lớp học (classId) *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="ID lớp đã có trong hệ thống (số)"
-            placeholderTextColor="#9CA3AF"
-            value={formData.classId}
-            onChangeText={(t) => handleChange("classId", t)}
-            keyboardType="numeric"
-          />
-          <Text style={styles.hint}>
-            Lớp phải tồn tại trong DB. Nếu chưa có, tạo lớp trước.
-          </Text>
-
-          <Text style={styles.sectionLabel}>Thông tin tùy chọn</Text>
-
-          <Text style={styles.label}>Mật khẩu</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Để trống → mặc định Student@123"
-            placeholderTextColor="#9CA3AF"
-            value={formData.password}
-            onChangeText={(t) => handleChange("password", t)}
+            value={form.password}
+            onChangeText={(v) => set("password", v)}
             secureTextEntry
+            placeholder="≥ 6 ký tự hoặc để trống"
+            placeholderTextColor="#9CA3AF"
           />
 
           <Text style={styles.label}>Email</Text>
           <TextInput
             style={styles.input}
-            placeholder="VD: quang.tran@student.edu.vn"
-            placeholderTextColor="#9CA3AF"
-            value={formData.email}
-            onChangeText={(t) => handleChange("email", t)}
-            keyboardType="email-address"
+            value={form.email}
+            onChangeText={(v) => set("email", v)}
             autoCapitalize="none"
+            keyboardType="email-address"
+            placeholderTextColor="#9CA3AF"
+            placeholder="email@school.edu"
           />
 
-          <Text style={styles.label}>Ngày sinh</Text>
+          <Text style={styles.label}>Ngày sinh (YYYY-MM-DD)</Text>
           <TextInput
             style={styles.input}
-            placeholder="YYYY-MM-DD (VD: 2005-01-19)"
+            value={form.dateOfBirth}
+            onChangeText={(v) => set("dateOfBirth", v)}
+            placeholder="2004-01-15"
             placeholderTextColor="#9CA3AF"
-            value={formData.dateOfBirth}
-            onChangeText={(t) => handleChange("dateOfBirth", t)}
-            keyboardType="numbers-and-punctuation"
           />
 
           <Text style={styles.label}>Giới tính</Text>
-          <View style={styles.genderRow}>
-            {["Nam", "Nữ", "Khác"].map((g) => {
-              const active = formData.gender === g;
-              return (
-                <TouchableOpacity
-                  key={g}
-                  style={[styles.genderChip, active && styles.genderChipActive]}
-                  onPress={() => handleChange("gender", g)}>
-                  <Text
-                    style={[
-                      styles.genderText,
-                      active && styles.genderTextActive,
-                    ]}>
-                    {g}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.row}>
+            {["Nam", "Nữ", "Khác"].map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.chip, form.gender === g && styles.chipOn]}
+                onPress={() => set("gender", g)}>
+                <Text
+                  style={{
+                    color: form.gender === g ? "#5B5BD6" : "#374151",
+                    fontWeight: "600",
+                  }}>
+                  {g}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          <Text style={styles.label}>Số điện thoại</Text>
+          <Text style={styles.label}>SĐT</Text>
           <TextInput
             style={styles.input}
-            placeholder="VD: 0901234567"
-            placeholderTextColor="#9CA3AF"
-            value={formData.phone}
-            onChangeText={(t) => handleChange("phone", t)}
+            value={form.phone}
+            onChangeText={(v) => set("phone", v)}
             keyboardType="phone-pad"
+            placeholderTextColor="#9CA3AF"
           />
 
           <Text style={styles.label}>Địa chỉ</Text>
           <TextInput
             style={styles.input}
-            placeholder="Địa chỉ liên hệ"
+            value={form.address}
+            onChangeText={(v) => set("address", v)}
             placeholderTextColor="#9CA3AF"
-            value={formData.address}
-            onChangeText={(t) => handleChange("address", t)}
           />
 
-          <Text style={styles.label}>Ngày nhập học</Text>
+          <Text style={styles.label}>Ngày nhập học (YYYY-MM-DD)</Text>
           <TextInput
             style={styles.input}
-            placeholder="YYYY-MM-DD (để trống = hôm nay)"
+            value={form.enrollmentDate}
+            onChangeText={(v) => set("enrollmentDate", v)}
+            placeholder="2024-09-01"
             placeholderTextColor="#9CA3AF"
-            value={formData.enrollmentDate}
-            onChangeText={(t) => handleChange("enrollmentDate", t)}
-            keyboardType="numbers-and-punctuation"
           />
 
-          <TouchableOpacity
-            style={[styles.button, loading && { opacity: 0.7 }]}
-            disabled={loading}
-            onPress={handleSubmit}
-            activeOpacity={0.8}>
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Tạo sinh viên</Text>
-            )}
-          </TouchableOpacity>
-
-          {createdInfo && (
-            <View style={styles.resultBox}>
-              <View style={styles.resultHeader}>
-                <Ionicons name="checkmark-circle" size={22} color="#059669" />
-                <Text style={styles.resultTitle}>Tài khoản đã tạo</Text>
-              </View>
-              {createdInfo.fullName ? (
-                <Text style={styles.resultText}>
-                  Họ tên:{" "}
-                  <Text style={styles.resultBold}>{createdInfo.fullName}</Text>
-                </Text>
-              ) : null}
-              {createdInfo.studentCode ? (
-                <Text style={styles.resultText}>
-                  MSSV:{" "}
-                  <Text style={styles.resultBold}>
-                    {createdInfo.studentCode}
-                  </Text>
-                </Text>
-              ) : null}
-              {createdInfo.username ? (
-                <Text style={styles.resultText}>
-                  Username:{" "}
-                  <Text style={styles.resultBold}>{createdInfo.username}</Text>
-                </Text>
-              ) : null}
-              {createdInfo.email ? (
-                <Text style={styles.resultText}>
-                  Email:{" "}
-                  <Text style={styles.resultBold}>{createdInfo.email}</Text>
-                </Text>
-              ) : null}
-              {createdInfo.defaultPassword ? (
-                <Text style={styles.resultText}>
-                  Mật khẩu:{" "}
-                  <Text style={styles.resultBold}>
-                    {createdInfo.defaultPassword}
-                  </Text>
-                </Text>
-              ) : null}
-              <Text style={styles.resultHint}>
-                Gửi thông tin đăng nhập cho sinh viên.
-              </Text>
+          {created && (
+            <View style={styles.result}>
+              <Text style={styles.resultTitle}>Đã tạo</Text>
+              <Text>Mã SV: {created.studentCode || "—"}</Text>
+              <Text>Username: {created.username}</Text>
+              <Text>Mật khẩu: {created.defaultPassword}</Text>
             </View>
           )}
+
+          <TouchableOpacity
+            style={[styles.btn, loading && { opacity: 0.7 }]}
+            onPress={handleSubmit}
+            disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={styles.btnText}>Tạo sinh viên</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={pickerOpen} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Chọn lớp</Text>
+              <TouchableOpacity onPress={() => setPickerOpen(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={classes}
+              keyExtractor={(i) => String(i.id)}
+              ListEmptyComponent={
+                <Text
+                  style={{
+                    textAlign: "center",
+                    color: "#9CA3AF",
+                    padding: 24,
+                  }}>
+                  Không có lớp. Tạo lớp trước.
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setSelectedClass(item);
+                    setPickerOpen(false);
+                  }}>
+                  <Text style={styles.pickerMain}>{item.label}</Text>
+                  <Text style={styles.pickerSub}>ID: {item.id}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -377,102 +360,108 @@ const CreateIdStudent: React.FC = () => {
 export default CreateIdStudent;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
+  safe: { flex: 1, backgroundColor: "#F3EEFF" },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
+    padding: 12,
+    backgroundColor: "#FFF",
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  backBtn: { width: 40, height: 40, justifyContent: "center" },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#1A1A1A",
+  back: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  headerSpacer: { width: 40 },
+  title: { flex: 1, textAlign: "center", fontSize: 17, fontWeight: "700" },
   scroll: { padding: 20, paddingBottom: 40 },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#5B5BD6",
-    marginBottom: 12,
-    marginTop: 4,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
-  },
   hint: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    marginTop: -10,
-    marginBottom: 14,
+    fontSize: 12.5,
+    color: "#5B5BD6",
+    backgroundColor: "#EDE9FE",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+    lineHeight: 18,
   },
+  label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 },
   input: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFF",
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 13,
-    marginBottom: 16,
+    paddingVertical: 12,
+    marginBottom: 14,
     fontSize: 15,
-    color: "#1A1A1A",
   },
-  genderRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
-  genderChip: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+  select: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
     borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 14,
+  },
+  selectValue: { flex: 1, fontSize: 15, color: "#1A1A1A" },
+  selectPlaceholder: { flex: 1, fontSize: 15, color: "#9CA3AF" },
+  row: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  genderChipActive: {
-    backgroundColor: "#5B5BD6",
-    borderColor: "#5B5BD6",
+  chipOn: { borderColor: "#5B5BD6", backgroundColor: "#EDE9FE" },
+  result: {
+    backgroundColor: "#D1FAE5",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    gap: 4,
   },
-  genderText: { fontSize: 14, fontWeight: "600", color: "#374151" },
-  genderTextActive: { color: "#FFFFFF" },
-  button: {
+  resultTitle: { fontWeight: "700", color: "#059669", marginBottom: 4 },
+  btn: {
     backgroundColor: "#5B5BD6",
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
-    marginTop: 8,
   },
-  buttonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
-  resultBox: {
-    marginTop: 24,
-    backgroundColor: "#ECFDF5",
-    borderWidth: 1,
-    borderColor: "#A7F3D0",
-    borderRadius: 14,
-    padding: 16,
+  btnText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
   },
-  resultHeader: {
+  modal: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "70%",
+    paddingBottom: 24,
+  },
+  modalHead: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
   },
-  resultTitle: { fontSize: 16, fontWeight: "700", color: "#065F46" },
-  resultText: { fontSize: 14, color: "#374151", marginBottom: 6 },
-  resultBold: { fontWeight: "700", color: "#111827" },
-  resultHint: {
-    fontSize: 12,
-    color: "#059669",
-    marginTop: 8,
-    fontStyle: "italic",
+  modalTitle: { fontSize: 16, fontWeight: "700" },
+  pickerRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
   },
+  pickerMain: { fontSize: 15, fontWeight: "600" },
+  pickerSub: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
 });

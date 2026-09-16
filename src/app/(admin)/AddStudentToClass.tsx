@@ -1,16 +1,13 @@
 import apiClient from "@/src/api/axios";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   RefreshControl,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -20,626 +17,350 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-interface ClassItem {
+/**
+ * POST /classes/:id/students
+ * Body: { studentIds: number[] }  — ID bảng students (không phải users.id)
+ *
+ * Xếp SV đã có vào lớp đang học + sync enrollments (backend).
+ */
+
+type ClassItem = {
   id: number;
-  classCode: string;
-  className: string;
-  capacity?: number;
-  enrolled?: number;
-  teacherName?: string;
-  academicYear?: string;
+  code: string;
+  label: string;
+  max?: number;
   status?: string;
-}
-
-interface StudentForm {
-  username: string;
-  password: string;
-  email: string;
-  fullName: string;
-  studentCode: string;
-  dateOfBirth: string;
-  gender: string;
-  phone: string;
-  address: string;
-  enrollmentDate: string;
-}
-
-interface CreatedResult {
-  studentCode?: string;
-  username?: string;
-  fullName?: string;
-  email?: string;
-  defaultPassword?: string;
-  className?: string;
-}
-
-const emptyForm: StudentForm = {
-  username: "",
-  password: "",
-  email: "",
-  fullName: "",
-  studentCode: "",
-  dateOfBirth: "",
-  gender: "",
-  phone: "",
-  address: "",
-  enrollmentDate: "",
 };
 
-const normalizeClass = (raw: any): ClassItem | null => {
-  const id = Number(raw?.id ?? raw?.ID ?? raw?.Id);
-  if (!id || isNaN(id)) return null;
-  return {
-    id,
-    classCode: String(
-      raw?.classCode ?? raw?.ClassCode ?? raw?.code ?? raw?.class_code ?? "",
-    ),
-    className: String(
-      raw?.className ??
-        raw?.ClassName ??
-        raw?.name ??
-        raw?.class_name ??
-        "Lớp chưa đặt tên",
-    ),
-    capacity: Number(raw?.capacity ?? raw?.Capacity ?? 0) || undefined,
-    enrolled: Number(
-      raw?.enrolled ??
-        raw?.Enrolled ??
-        raw?.studentCount ??
-        raw?.StudentCount ??
-        0,
-    ),
-    teacherName:
-      raw?.teacherName ??
-      raw?.TeacherName ??
-      raw?.teacher?.fullName ??
-      raw?.Teacher?.FullName ??
-      raw?.teacher?.name,
-    academicYear: raw?.academicYear ?? raw?.AcademicYear ?? raw?.academic_year,
-    status: String(raw?.status ?? raw?.Status ?? "active").toLowerCase(),
-  };
+type StudentItem = {
+  id: number;
+  code: string;
+  name: string;
+  classId?: number;
+  classCode?: string;
 };
 
 const AddStudentToClass: React.FC = () => {
   const router = useRouter();
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [loadingClasses, setLoadingClasses] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
-  const [showClassPicker, setShowClassPicker] = useState(false);
-  const [classSearch, setClassSearch] = useState("");
-  const [form, setForm] = useState<StudentForm>(emptyForm);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [createdInfo, setCreatedInfo] = useState<CreatedResult | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchClasses = useCallback(async () => {
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [students, setStudents] = useState<StudentItem[]>([]);
+  const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [classPicker, setClassPicker] = useState(false);
+  const [classQ, setClassQ] = useState("");
+  const [studentQ, setStudentQ] = useState("");
+
+  const load = useCallback(async () => {
     try {
-      let list: any[] = [];
-      // Ưu tiên lớp đang mở / đang học
-      try {
-        const res = await apiClient.get("/classes", {
-          params: { status: "active" },
-        });
-        const data = res.data?.data ?? res.data;
-        list = Array.isArray(data)
-          ? data
-          : (data?.items ?? data?.classes ?? []);
-      } catch {
-        try {
-          const res = await apiClient.get("/classes");
-          const data = res.data?.data ?? res.data;
-          list = Array.isArray(data)
-            ? data
-            : (data?.items ?? data?.classes ?? []);
-        } catch {
-          const res = await apiClient.get("/course-classes");
-          const data = res.data?.data ?? res.data;
-          list = Array.isArray(data) ? data : (data?.items ?? []);
-        }
-      }
+      const [cRes, sRes] = await Promise.all([
+        apiClient.get("/classes"),
+        apiClient.get("/students"),
+      ]);
+      const cRaw = cRes.data?.data ?? cRes.data ?? [];
+      const sRaw = sRes.data?.data ?? sRes.data ?? [];
 
-      const normalized = list
-        .map(normalizeClass)
-        .filter((c): c is ClassItem => c !== null)
-        // Ưu tiên lớp đang học / active; nếu không có status thì vẫn hiện
-        .filter((c) => {
-          if (!c.status) return true;
-          return (
-            c.status === "active" ||
-            c.status === "open" ||
-            c.status === "ongoing" ||
-            c.status === "in_progress" ||
-            c.status === "studying"
-          );
-        });
+      const cList: ClassItem[] = (Array.isArray(cRaw) ? cRaw : [])
+        .map((c: any) => {
+          const id = Number(c.ID ?? c.id);
+          if (!id) return null;
+          const code = String(c.ClassCode ?? c.classCode ?? id);
+          const major = c.Major?.Name ?? c.Major?.name ?? "";
+          const status = String(c.Status ?? c.status ?? "open").toLowerCase();
+          return {
+            id,
+            code,
+            label: major ? `${code} · ${major}` : code,
+            max: Number(c.MaxStudents ?? c.maxStudents ?? 0) || undefined,
+            status,
+          };
+        })
+        .filter(Boolean) as ClassItem[];
 
-      setClasses(normalized);
+      // Ưu tiên lớp open; nếu filter hết thì hiện tất cả
+      const openOnly = cList.filter(
+        (c) =>
+          !c.status ||
+          c.status === "open" ||
+          c.status === "active" ||
+          c.status === "ongoing",
+      );
+      setClasses(openOnly.length ? openOnly : cList);
+
+      setStudents(
+        (Array.isArray(sRaw) ? sRaw : [])
+          .map((s: any) => {
+            const id = Number(s.ID ?? s.id);
+            if (!id) return null;
+            return {
+              id,
+              code: String(s.StudentCode ?? s.studentCode ?? id),
+              name: String(
+                s.User?.FullName ??
+                  s.User?.fullName ??
+                  s.fullName ??
+                  s.FullName ??
+                  "SV",
+              ),
+              classId:
+                Number(s.ClassID ?? s.classId ?? s.Class?.ID ?? 0) || undefined,
+              classCode: String(s.Class?.ClassCode ?? s.Class?.classCode ?? ""),
+            };
+          })
+          .filter(Boolean) as StudentItem[],
+      );
     } catch (e) {
-      console.log("fetchClasses error:", e);
+      console.log("load error", e);
       setClasses([]);
+      setStudents([]);
     } finally {
-      setLoadingClasses(false);
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchClasses();
-  }, [fetchClasses]);
+    load();
+  }, [load]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchClasses();
-  };
-
-  const setField = <K extends keyof StudentForm>(key: K, value: string) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const filteredClasses = classes.filter((c) => {
-    const q = classSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      c.classCode.toLowerCase().includes(q) ||
-      c.className.toLowerCase().includes(q) ||
-      String(c.id).includes(q) ||
-      (c.teacherName || "").toLowerCase().includes(q)
+  const filteredClasses = useMemo(() => {
+    const q = classQ.trim().toLowerCase();
+    if (!q) return classes;
+    return classes.filter(
+      (c) =>
+        c.code.toLowerCase().includes(q) ||
+        c.label.toLowerCase().includes(q) ||
+        String(c.id).includes(q),
     );
-  });
+  }, [classes, classQ]);
 
-  const validate = (): boolean => {
-    if (!selectedClass) {
-      Alert.alert("Thiếu thông tin", "Vui lòng chọn lớp học.");
-      return false;
-    }
-    if (!form.username.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập username.");
-      return false;
-    }
-    if (!form.fullName.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập họ và tên.");
-      return false;
-    }
-    if (!form.studentCode.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập mã sinh viên.");
-      return false;
-    }
-    if (form.password.trim() && form.password.trim().length < 6) {
-      Alert.alert("Sai định dạng", "Mật khẩu phải có ít nhất 6 ký tự.");
-      return false;
-    }
-    if (
-      form.dateOfBirth.trim() &&
-      !/^\d{4}-\d{2}-\d{2}$/.test(form.dateOfBirth.trim())
-    ) {
-      Alert.alert("Sai định dạng", "Ngày sinh phải đúng YYYY-MM-DD.");
-      return false;
-    }
-    if (
-      form.enrollmentDate.trim() &&
-      !/^\d{4}-\d{2}-\d{2}$/.test(form.enrollmentDate.trim())
-    ) {
-      Alert.alert("Sai định dạng", "Ngày nhập học phải đúng YYYY-MM-DD.");
-      return false;
-    }
-    return true;
+  const filteredStudents = useMemo(() => {
+    const q = studentQ.trim().toLowerCase();
+    return students.filter((s) => {
+      if (selectedClass && s.classId && s.classId === selectedClass.id) {
+        // đã thuộc lớp này — vẫn hiện nhưng có thể disable
+      }
+      if (!q) return true;
+      return (
+        s.code.toLowerCase().includes(q) ||
+        s.name.toLowerCase().includes(q) ||
+        String(s.id).includes(q)
+      );
+    });
+  }, [students, studentQ, selectedClass]);
+
+  const toggle = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const handleSubmit = async () => {
-    if (!validate() || !selectedClass) return;
+    if (!selectedClass) {
+      Alert.alert("Thiếu thông tin", "Chọn lớp học.");
+      return;
+    }
+    if (selectedIds.size === 0) {
+      Alert.alert("Thiếu thông tin", "Chọn ít nhất một sinh viên.");
+      return;
+    }
 
     setSubmitting(true);
-    setCreatedInfo(null);
-
-    const payload: Record<string, any> = {
-      username: form.username.trim(),
-      fullName: form.fullName.trim(),
-      studentCode: form.studentCode.trim(),
-      classId: selectedClass.id,
-      classID: selectedClass.id,
-    };
-
-    if (form.password.trim()) payload.password = form.password.trim();
-    if (form.email.trim()) payload.email = form.email.trim();
-    if (form.dateOfBirth.trim()) payload.dateOfBirth = form.dateOfBirth.trim();
-    if (form.gender.trim()) payload.gender = form.gender.trim();
-    if (form.phone.trim()) payload.phone = form.phone.trim();
-    if (form.address.trim()) payload.address = form.address.trim();
-    if (form.enrollmentDate.trim())
-      payload.enrollmentDate = form.enrollmentDate.trim();
-
     try {
-      // 1) Tạo sinh viên gắn classId
-      const res = await apiClient.post("/students", payload);
-      const data = res.data?.data ?? res.data;
-      const studentId =
-        data?.id ?? data?.ID ?? data?.studentId ?? data?.StudentID;
-      const defaultPassword =
-        res.data?.defaultPassword || form.password.trim() || "Student@123";
-
-      // 2) Nếu backend tách đăng ký lớp học phần, thử enroll thêm
-      if (studentId) {
-        try {
-          await apiClient.post("/course-registrations", {
-            courseClassId: selectedClass.id,
-            courseClassID: selectedClass.id,
-            classId: selectedClass.id,
-            classID: selectedClass.id,
-            studentId: Number(studentId),
-            studentID: Number(studentId),
-          });
-        } catch {
-          // Không bắt buộc — nhiều backend gán lớp ngay khi tạo student
-        }
-
-        try {
-          await apiClient.post(`/classes/${selectedClass.id}/students`, {
-            studentId: Number(studentId),
-            studentID: Number(studentId),
-          });
-        } catch {
-          // optional
-        }
-      }
-
-      setCreatedInfo({
-        studentCode:
-          data?.StudentCode || data?.studentCode || form.studentCode.trim(),
-        username: form.username.trim(),
-        fullName: form.fullName.trim(),
-        email:
-          data?.User?.Email ||
-          data?.User?.email ||
-          data?.email ||
-          form.email.trim() ||
-          undefined,
-        defaultPassword,
-        className: `${selectedClass.classCode} — ${selectedClass.className}`,
-      });
-
+      const res = await apiClient.post(
+        `/classes/${selectedClass.id}/students`,
+        { studentIds: Array.from(selectedIds) },
+      );
       Alert.alert(
         "Thành công",
-        `Đã thêm sinh viên vào lớp ${selectedClass.classCode}.`,
+        res.data?.message ||
+          `Đã xếp ${selectedIds.size} SV vào lớp ${selectedClass.code}.`,
       );
-
-      setForm(emptyForm);
-    } catch (error: any) {
-      const d = error?.response?.data;
-      let message =
-        d?.message || d?.error || "Không thể thêm sinh viên vào lớp.";
-      if (d?.error && typeof d.error === "string" && d.message) {
-        message = `${d.message}\n${d.error}`;
-      } else if (!error?.response) {
-        message = "Không kết nối được server. Kiểm tra mạng / baseURL.";
-      } else if (
-        error?.response?.status === 401 ||
-        error?.response?.status === 403
-      ) {
-        message = "Bạn chưa đăng nhập hoặc không có quyền admin.";
-      } else if (error?.response?.status === 404) {
-        message =
-          "API tạo sinh viên / gán lớp chưa có trên backend hoặc lớp không tồn tại.";
-      }
-      Alert.alert("Lỗi", message);
+      setSelectedIds(new Set());
+      load();
+    } catch (e: any) {
+      const d = e?.response?.data;
+      Alert.alert(
+        "Lỗi",
+        [d?.message, d?.error].filter(Boolean).join("\n") ||
+          "Thêm sinh viên vào lớp thất bại.",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const renderClassItem = ({ item }: { item: ClassItem }) => {
-    const isSelected = selectedClass?.id === item.id;
+  if (loading) {
     return (
-      <TouchableOpacity
-        style={[styles.classItem, isSelected && styles.classItemSelected]}
-        onPress={() => {
-          setSelectedClass(item);
-          setShowClassPicker(false);
-          setClassSearch("");
-        }}
-        activeOpacity={0.7}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.classCode}>
-            {item.classCode || `#${item.id}`}
-          </Text>
-          <Text style={styles.className}>{item.className}</Text>
-          <Text style={styles.classMeta}>
-            ID: {item.id}
-            {item.teacherName ? ` · GV: ${item.teacherName}` : ""}
-            {item.capacity
-              ? ` · ${item.enrolled ?? 0}/${item.capacity} SV`
-              : item.enrolled
-                ? ` · ${item.enrolled} SV`
-                : ""}
-          </Text>
-        </View>
-        {isSelected && (
-          <Ionicons name="checkmark-circle" size={22} color="#5B5BD6" />
-        )}
-      </TouchableOpacity>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#5B5BD6" />
+      </View>
     );
-  };
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
-
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+          <Ionicons name="arrow-back" size={22} color="#1A1A1A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Thêm SV vào lớp</Text>
-        <TouchableOpacity onPress={onRefresh} style={styles.backBtn}>
+        <Text style={styles.title}>Thêm SV vào lớp</Text>
+        <TouchableOpacity
+          onPress={() => {
+            setRefreshing(true);
+            load();
+          }}
+          style={styles.back}>
           <Ionicons name="refresh" size={20} color="#5B5BD6" />
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
+      <View style={styles.body}>
+        <Text style={styles.hint}>
+          Chọn lớp đang học + SV đã có trong hệ thống. API: POST
+          /classes/:id/students {"{ studentIds }"}
+        </Text>
+
+        <Text style={styles.label}>Lớp học *</Text>
+        <TouchableOpacity
+          style={styles.select}
+          onPress={() => setClassPicker(true)}>
+          <Text
+            style={
+              selectedClass ? styles.selectValue : styles.selectPlaceholder
+            }>
+            {selectedClass
+              ? `${selectedClass.label} (ID ${selectedClass.id})`
+              : "Chọn lớp..."}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+        </TouchableOpacity>
+
+        <Text style={styles.label}>
+          Sinh viên * ({selectedIds.size} đã chọn)
+        </Text>
+        <View style={styles.search}>
+          <Ionicons name="search" size={18} color="#9CA3AF" />
+          <TextInput
+            style={{ flex: 1, marginLeft: 8 }}
+            placeholder="Tìm mã / tên SV..."
+            value={studentQ}
+            onChangeText={setStudentQ}
+            placeholderTextColor="#9CA3AF"
+          />
+        </View>
+
+        <FlatList
+          data={filteredStudents}
+          keyExtractor={(i) => String(i.id)}
+          style={{ flex: 1 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={onRefresh}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
               colors={["#5B5BD6"]}
-              tintColor="#5B5BD6"
             />
-          }>
-          <Text style={styles.sectionLabel}>1. Chọn lớp đang học</Text>
+          }
+          ListEmptyComponent={
+            <Text style={styles.empty}>Không có sinh viên</Text>
+          }
+          renderItem={({ item }) => {
+            const on = selectedIds.has(item.id);
+            const already = selectedClass && item.classId === selectedClass.id;
+            return (
+              <TouchableOpacity
+                style={[styles.row, on && styles.rowOn]}
+                onPress={() => toggle(item.id)}
+                activeOpacity={0.7}>
+                <Ionicons
+                  name={on ? "checkbox" : "square-outline"}
+                  size={22}
+                  color={on ? "#5B5BD6" : "#9CA3AF"}
+                />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.rowTitle}>
+                    {item.code} · {item.name}
+                  </Text>
+                  <Text style={styles.rowSub}>
+                    ID: {item.id}
+                    {item.classCode ? ` · Lớp hiện tại: ${item.classCode}` : ""}
+                    {already ? " · (đã ở lớp này)" : ""}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
 
-          <TouchableOpacity
-            style={styles.classSelector}
-            onPress={() => setShowClassPicker(true)}
-            activeOpacity={0.7}>
-            {selectedClass ? (
-              <View style={{ flex: 1 }}>
-                <Text style={styles.selectedCode}>
-                  {selectedClass.classCode || `Lớp #${selectedClass.id}`}
-                </Text>
-                <Text style={styles.selectedName}>
-                  {selectedClass.className}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.placeholder}>
-                {loadingClasses
-                  ? "Đang tải danh sách lớp..."
-                  : "Chạm để chọn lớp học"}
-              </Text>
-            )}
-            <Ionicons name="chevron-down" size={20} color="#6B7280" />
-          </TouchableOpacity>
-
-          {classes.length === 0 && !loadingClasses && (
-            <Text style={styles.hintWarn}>
-              Không tải được lớp từ server. Bạn vẫn có thể nhập ID lớp thủ công
-              bên dưới (nếu backend yêu cầu).
+        <TouchableOpacity
+          style={[
+            styles.btn,
+            (submitting || selectedIds.size === 0 || !selectedClass) && {
+              opacity: 0.6,
+            },
+          ]}
+          onPress={handleSubmit}
+          disabled={submitting || selectedIds.size === 0 || !selectedClass}>
+          {submitting ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <Text style={styles.btnText}>
+              Xếp {selectedIds.size || ""} SV vào lớp
             </Text>
           )}
+        </TouchableOpacity>
+      </View>
 
-          {!selectedClass && (
-            <View style={styles.manualBox}>
-              <Text style={styles.label}>Hoặc nhập ID lớp thủ công</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="VD: 5"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="numeric"
-                onChangeText={(t) => {
-                  const id = Number(t);
-                  if (!isNaN(id) && id > 0) {
-                    setSelectedClass({
-                      id,
-                      classCode: `ID-${id}`,
-                      className: "Lớp nhập thủ công",
-                      status: "active",
-                    });
-                  } else {
-                    setSelectedClass(null);
-                  }
-                }}
-              />
-            </View>
-          )}
-
-          <Text style={[styles.sectionLabel, { marginTop: 20 }]}>
-            2. Thông tin sinh viên mới
-          </Text>
-
-          <Text style={styles.label}>Username *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: quang.tran"
-            placeholderTextColor="#9CA3AF"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={form.username}
-            onChangeText={(t) => setField("username", t)}
-          />
-
-          <Text style={styles.label}>Họ và tên *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: Trần Đăng Quang"
-            placeholderTextColor="#9CA3AF"
-            value={form.fullName}
-            onChangeText={(t) => setField("fullName", t)}
-          />
-
-          <Text style={styles.label}>Mã sinh viên *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: 20260015"
-            placeholderTextColor="#9CA3AF"
-            autoCapitalize="characters"
-            value={form.studentCode}
-            onChangeText={(t) => setField("studentCode", t)}
-          />
-
-          <Text style={styles.label}>Mật khẩu</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Để trống → Student@123"
-            placeholderTextColor="#9CA3AF"
-            secureTextEntry
-            value={form.password}
-            onChangeText={(t) => setField("password", t)}
-          />
-
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: quang.tran@student.edu.vn"
-            placeholderTextColor="#9CA3AF"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={form.email}
-            onChangeText={(t) => setField("email", t)}
-          />
-
-          <Text style={styles.label}>Số điện thoại</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: 09xxxxxxxx"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="phone-pad"
-            value={form.phone}
-            onChangeText={(t) => setField("phone", t)}
-          />
-
-          <Text style={styles.label}>Giới tính</Text>
-          <View style={styles.genderRow}>
-            {["Nam", "Nữ", "Khác"].map((g) => (
-              <TouchableOpacity
-                key={g}
-                style={[
-                  styles.genderChip,
-                  form.gender === g && styles.genderChipActive,
-                ]}
-                onPress={() => setField("gender", g)}>
-                <Text
-                  style={[
-                    styles.genderText,
-                    form.gender === g && styles.genderTextActive,
-                  ]}>
-                  {g}
-                </Text>
+      <Modal visible={classPicker} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>Chọn lớp</Text>
+              <TouchableOpacity onPress={() => setClassPicker(false)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={styles.label}>Ngày sinh (YYYY-MM-DD)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: 2005-08-15"
-            placeholderTextColor="#9CA3AF"
-            value={form.dateOfBirth}
-            onChangeText={(t) => setField("dateOfBirth", t)}
-          />
-
-          <Text style={styles.label}>Ngày nhập học (YYYY-MM-DD)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: 2026-09-01"
-            placeholderTextColor="#9CA3AF"
-            value={form.enrollmentDate}
-            onChangeText={(t) => setField("enrollmentDate", t)}
-          />
-
-          <Text style={styles.label}>Địa chỉ</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Địa chỉ liên hệ"
-            placeholderTextColor="#9CA3AF"
-            multiline
-            numberOfLines={3}
-            value={form.address}
-            onChangeText={(t) => setField("address", t)}
-          />
-
-          <TouchableOpacity
-            style={[styles.submitBtn, submitting && { opacity: 0.7 }]}
-            disabled={submitting}
-            onPress={handleSubmit}>
-            {submitting ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.submitText}>Thêm sinh viên vào lớp</Text>
-            )}
-          </TouchableOpacity>
-
-          {createdInfo && (
-            <View style={styles.resultCard}>
-              <Text style={styles.resultTitle}>Đã tạo thành công</Text>
-              <Text style={styles.resultLine}>
-                Lớp: {createdInfo.className}
-              </Text>
-              <Text style={styles.resultLine}>
-                MSSV: {createdInfo.studentCode}
-              </Text>
-              <Text style={styles.resultLine}>
-                Username: {createdInfo.username}
-              </Text>
-              <Text style={styles.resultLine}>
-                Họ tên: {createdInfo.fullName}
-              </Text>
-              {createdInfo.email ? (
-                <Text style={styles.resultLine}>
-                  Email: {createdInfo.email}
-                </Text>
-              ) : null}
-              <Text style={styles.resultPassword}>
-                Mật khẩu: {createdInfo.defaultPassword}
-              </Text>
             </View>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      <Modal
-        visible={showClassPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowClassPicker(false)}>
-        <SafeAreaView style={styles.modalSafe}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Chọn lớp đang học</Text>
-            <TouchableOpacity onPress={() => setShowClassPicker(false)}>
-              <Ionicons name="close" size={26} color="#1A1A1A" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.searchBox}>
-            <Ionicons name="search" size={18} color="#9CA3AF" />
             <TextInput
-              style={styles.searchInput}
-              placeholder="Tìm mã lớp, tên lớp, ID..."
+              style={styles.modalSearch}
+              placeholder="Tìm lớp..."
+              value={classQ}
+              onChangeText={setClassQ}
               placeholderTextColor="#9CA3AF"
-              value={classSearch}
-              onChangeText={setClassSearch}
             />
-          </View>
-
-          {loadingClasses ? (
-            <View style={styles.center}>
-              <ActivityIndicator size="large" color="#5B5BD6" />
-            </View>
-          ) : (
             <FlatList
               data={filteredClasses}
-              keyExtractor={(item) => String(item.id)}
-              renderItem={renderClassItem}
-              contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+              keyExtractor={(i) => String(i.id)}
               ListEmptyComponent={
-                <Text style={styles.emptyText}>
-                  Không có lớp phù hợp. Kiểm tra API GET /classes trên backend.
-                </Text>
+                <Text style={styles.empty}>Không có lớp</Text>
               }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setSelectedClass(item);
+                    setClassPicker(false);
+                    setSelectedIds(new Set());
+                  }}>
+                  <Text style={styles.rowTitle}>{item.label}</Text>
+                  <Text style={styles.rowSub}>
+                    ID: {item.id}
+                    {item.max ? ` · Tối đa ${item.max}` : ""}
+                  </Text>
+                </TouchableOpacity>
+              )}
             />
-          )}
-        </SafeAreaView>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -648,165 +369,118 @@ const AddStudentToClass: React.FC = () => {
 export default AddStudentToClass;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
+  safe: { flex: 1, backgroundColor: "#F3EEFF" },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F3EEFF",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    padding: 12,
+    backgroundColor: "#FFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
   },
-  backBtn: {
+  back: {
     width: 40,
     height: 40,
     justifyContent: "center",
     alignItems: "center",
   },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#1A1A1A" },
-  scroll: { padding: 20, paddingBottom: 48 },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
+  title: { flex: 1, textAlign: "center", fontSize: 17, fontWeight: "700" },
+  body: { flex: 1, padding: 16, paddingBottom: 20 },
+  hint: {
+    fontSize: 12.5,
     color: "#5B5BD6",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginBottom: 10,
-  },
-  classSelector: {
-    backgroundColor: "#FFF",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  selectedCode: { fontSize: 15, fontWeight: "700", color: "#5B5BD6" },
-  selectedName: { fontSize: 13, color: "#4B5563", marginTop: 2 },
-  placeholder: { flex: 1, fontSize: 15, color: "#9CA3AF" },
-  hintWarn: {
-    marginTop: 8,
-    fontSize: 12,
-    color: "#F97316",
+    backgroundColor: "#EDE9FE",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 14,
     lineHeight: 18,
   },
-  manualBox: { marginTop: 12 },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  input: {
+  label: { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 8 },
+  select: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#FFF",
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: "#1A1A1A",
+    paddingVertical: 14,
+    marginBottom: 14,
   },
-  textArea: { minHeight: 80, textAlignVertical: "top" },
-  genderRow: { flexDirection: "row", gap: 10 },
-  genderChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: "#FFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  genderChipActive: {
-    backgroundColor: "#EDE9FE",
-    borderColor: "#5B5BD6",
-  },
-  genderText: { fontSize: 14, color: "#6B7280", fontWeight: "600" },
-  genderTextActive: { color: "#5B5BD6" },
-  submitBtn: {
-    marginTop: 28,
-    backgroundColor: "#5B5BD6",
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  submitText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
-  resultCard: {
-    marginTop: 20,
-    backgroundColor: "#ECFDF5",
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#A7F3D0",
-  },
-  resultTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#059669",
-    marginBottom: 8,
-  },
-  resultLine: { fontSize: 14, color: "#065F46", marginBottom: 4 },
-  resultPassword: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#047857",
-    marginTop: 6,
-  },
-  modalSafe: { flex: 1, backgroundColor: "#F9FAFB" },
-  modalHeader: {
+  selectValue: { flex: 1, fontSize: 15, color: "#1A1A1A" },
+  selectPlaceholder: { flex: 1, fontSize: 15, color: "#9CA3AF" },
+  search: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
-    backgroundColor: "#FFF",
-  },
-  modalTitle: { fontSize: 17, fontWeight: "700", color: "#1A1A1A" },
-  searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    margin: 16,
     backgroundColor: "#FFF",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     paddingHorizontal: 12,
-    gap: 8,
-  },
-  searchInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: "#1A1A1A" },
-  classItem: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 14,
+    height: 44,
     marginBottom: 10,
+  },
+  row: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  classItemSelected: {
-    borderColor: "#5B5BD6",
-    backgroundColor: "#F5F3FF",
+  rowOn: { borderColor: "#5B5BD6", backgroundColor: "#F5F3FF" },
+  rowTitle: { fontSize: 14, fontWeight: "600", color: "#1A1A1A" },
+  rowSub: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  empty: { textAlign: "center", color: "#9CA3AF", marginTop: 24 },
+  btn: {
+    backgroundColor: "#5B5BD6",
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 10,
   },
-  classCode: { fontSize: 14, fontWeight: "700", color: "#5B5BD6" },
-  className: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#1A1A1A",
-    marginTop: 2,
+  btnText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
   },
-  classMeta: { fontSize: 12, color: "#6B7280", marginTop: 4 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyText: {
-    textAlign: "center",
-    color: "#9CA3AF",
-    marginTop: 40,
-    fontSize: 14,
-    paddingHorizontal: 24,
+  modal: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "75%",
+    paddingBottom: 24,
+  },
+  modalHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  modalTitle: { fontSize: 16, fontWeight: "700" },
+  modalSearch: {
+    margin: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  pickerRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
   },
 });
