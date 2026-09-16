@@ -197,7 +197,10 @@ const RegisterCourses: React.FC = () => {
           onPress: async () => {
             setSubmittingId(item.courseOfferingId || item.classId);
             try {
-              await registerCourseAPI(item.classId, item.courseId);
+              await registerCourseAPI({
+                classId: item.classId,
+                courseId: item.courseId,
+              });
               Alert.alert(
                 "Thành công",
                 "Đăng ký học phần thành công.\nMôn đã được thêm vào lịch học của bạn.",

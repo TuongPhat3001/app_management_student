@@ -85,8 +85,11 @@ export default function StudentLayout() {
         }}
       />
 
+      {/* Hidden routes — chỉ mở bằng navigate, không hiện tab */}
       <Tabs.Screen name="Notification" options={{ href: null }} />
       <Tabs.Screen name="QrAttendance" options={{ href: null }} />
+      <Tabs.Screen name="StudentSubmissions" options={{ href: null }} />
+      <Tabs.Screen name="StudentExercises" options={{ href: null }} />
       <Tabs.Screen name="ViewTranscript" options={{ href: null }} />
     </Tabs>
   );

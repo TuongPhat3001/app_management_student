@@ -1,11 +1,6 @@
 import { LoginRequest } from "../type/auth";
 import api from "./axios";
 
-export const useAuth = () => {
-  const token = localStorage.getItem("token");
-  return { token };
-};
-
 export const loginAPI = (data: LoginRequest) => {
   return api.post("/login", data);
 };
@@ -38,23 +33,43 @@ export const exportTranscriptAPI = () => {
   return api.get("/transcripts/export", { responseType: "blob" });
 };
 
-export interface CourseClass {
-  id: number;
-  course: any;
-  classCode: string;
-  room: string;
-  teacher: any;
-  startTime: string;
-  endTime: string;
+export const getOpenCourseClassesAPI = (params?: {
+  semesterId?: number | string;
+}) => {
+  return api.get("/course-classes/open", { params });
+};
+
+export function registerCourseAPI(
+  payloadOrCourseId:
+    | number
+    | { classId: number; courseId?: number; note?: string },
+  classIdMaybe?: number,
+) {
+  let classId: number;
+  let courseId: number | undefined;
+  let note: string | undefined;
+
+  if (typeof payloadOrCourseId === "object" && payloadOrCourseId !== null) {
+    classId = Number(payloadOrCourseId.classId);
+    courseId = payloadOrCourseId.courseId
+      ? Number(payloadOrCourseId.courseId)
+      : undefined;
+    note = payloadOrCourseId.note;
+  } else {
+    courseId = Number(payloadOrCourseId);
+    classId = Number(classIdMaybe);
+  }
+
+  if (!classId || Number.isNaN(classId)) {
+    return Promise.reject(new Error("classId không hợp lệ"));
+  }
+
+  return api.post("/course-registrations", {
+    classId,
+    courseId: courseId && !Number.isNaN(courseId) ? courseId : undefined,
+    note: note || undefined,
+  });
 }
-
-export const getOpenCourseClassesAPI = () => {
-  return api.get("/course-classes/open");
-};
-
-export const registerCourseAPI = (courseId: number, classId: number) => {
-  return api.post("/course-registrations", { courseId, classId });
-};
 
 export const getMyCourseRegistrationsAPI = () => {
   return api.get("/course-registrations");
@@ -85,7 +100,8 @@ export const getStudentAttendanceClassesAPI = () => {
 };
 
 export const attendanceByQRAPI = (qrCode: string) => {
-  return api.post("/attendance/qr", { qrCode });
+  const code = String(qrCode || "").trim();
+  return api.post("/attendance/qr", { code, qrCode: code });
 };
 
 export const getMyAttendancesAPI = () => {
@@ -96,8 +112,14 @@ export const getTeacherAttendanceClassesAPI = () => {
   return api.get("/teacher/attendance/classes");
 };
 
-export const createAttendanceSessionAPI = (classId: number) => {
-  return api.post("/attendance/sessions", { classId });
+export const createAttendanceSessionAPI = (payload: {
+  classId?: number;
+  courseId?: number;
+  courseOfferingId?: number;
+  classDate?: string;
+  note?: string;
+}) => {
+  return api.post("/attendance/sessions", payload);
 };
 
 export const getAttendanceSessionQRAPI = (sessionId: number) => {
@@ -108,9 +130,13 @@ export const getStudentExercisesAPI = () => {
   return api.get("/student/exercises");
 };
 
-export const submitExerciseAPI = (exerciseId: number, data: FormData) => {
-  return api.post(`/exercises/${exerciseId}/submissions`, data, {
-    headers: { "Content-Type": "multipart/form-data" },
+export const submitExerciseAPI = (
+  exerciseId: number,
+  data: { content?: string; fileUrl?: string },
+) => {
+  return api.post(`/exercises/${exerciseId}/submissions`, {
+    content: data.content || "",
+    fileUrl: data.fileUrl || "",
   });
 };
 

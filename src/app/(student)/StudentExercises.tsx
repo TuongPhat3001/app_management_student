@@ -84,10 +84,10 @@ const StudentExercises: React.FC = () => {
     }
     setSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append("content", content.trim());
-      formData.append("fileUrl", fileUrl.trim());
-      await submitExerciseAPI(selected.id, formData);
+      await submitExerciseAPI(selected.id, {
+        content: content.trim(),
+        fileUrl: fileUrl.trim(),
+      });
       Alert.alert("Thành công", "Đã nộp bài tập.");
       setSelected(null);
       setContent("");
