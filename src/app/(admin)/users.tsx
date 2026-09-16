@@ -1,7 +1,7 @@
 import apiClient from "@/src/api/axios";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,128 +16,126 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type UserRole = "student" | "teacher" | "admin" | "all";
+type RoleFilter = "all" | "student" | "teacher";
 
-interface UserItem {
-  id: number;
+type UserItem = {
+  id: number; // students.id hoặc teachers.id
+  role: "student" | "teacher";
   fullName: string;
+  username: string;
   email: string;
-  role: string;
-  studentId?: string;
-  major?: string;
+  code: string;
   status?: string;
-}
+};
 
-const ROLE_FILTERS: { label: string; value: UserRole }[] = [
-  { label: "Tất cả", value: "all" },
-  { label: "Sinh viên", value: "student" },
-  { label: "Giảng viên", value: "teacher" },
-  { label: "Admin", value: "admin" },
-];
-
-const MOCK_USERS: UserItem[] = [
-  {
-    id: 1,
-    fullName: "Nguyễn Văn An",
-    email: "an.nguyen@student.edu.vn",
-    role: "student",
-    studentId: "20260001",
-    major: "CNTT",
-    status: "active",
-  },
-  {
-    id: 2,
-    fullName: "Trương Tường Phát",
-    email: "phat.truong@teacher.edu.vn",
-    role: "teacher",
-    status: "active",
-  },
-  {
-    id: 3,
-    fullName: "Trần Thị Bình",
-    email: "binh.tran@student.edu.vn",
-    role: "student",
-    studentId: "20260002",
-    major: "KTPM",
-    status: "active",
-  },
-  {
-    id: 4,
-    fullName: "Admin Hệ thống",
-    email: "admin@edu.vn",
-    role: "admin",
-    status: "active",
-  },
-];
-
-const Users = () => {
+const Users: React.FC = () => {
   const router = useRouter();
-  const [users, setUsers] = useState<UserItem[]>([]);
+  const [items, setItems] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState<UserRole>("all");
+  const [role, setRole] = useState<RoleFilter>("all");
 
-  const fetchUsers = useCallback(async () => {
+  const load = useCallback(async () => {
     try {
-      const res = await apiClient.get("/users");
-      const data = res.data?.data || res.data || [];
-      setUsers(Array.isArray(data) ? data : []);
-    } catch {
-      setUsers(MOCK_USERS);
+      const [sRes, tRes] = await Promise.all([
+        apiClient.get("/students"),
+        apiClient.get("/teachers"),
+      ]);
+      const students = Array.isArray(sRes.data?.data) ? sRes.data.data : [];
+      const teachers = Array.isArray(tRes.data?.data) ? tRes.data.data : [];
+
+      const sItems: UserItem[] = students
+        .map((s: any) => {
+          const id = Number(s.ID ?? s.id);
+          if (!id) return null;
+          return {
+            id,
+            role: "student" as const,
+            fullName: String(
+              s.User?.FullName ?? s.User?.fullName ?? s.fullName ?? "SV",
+            ),
+            username: String(s.User?.Username ?? s.User?.username ?? ""),
+            email: String(s.User?.Email ?? s.User?.email ?? ""),
+            code: String(s.StudentCode ?? s.studentCode ?? ""),
+            status: String(s.Status ?? s.status ?? "active"),
+          };
+        })
+        .filter(Boolean) as UserItem[];
+
+      const tItems: UserItem[] = teachers
+        .map((t: any) => {
+          const id = Number(t.ID ?? t.id);
+          if (!id) return null;
+          return {
+            id,
+            role: "teacher" as const,
+            fullName: String(
+              t.User?.FullName ?? t.User?.fullName ?? t.fullName ?? "GV",
+            ),
+            username: String(t.User?.Username ?? t.User?.username ?? ""),
+            email: String(t.User?.Email ?? t.User?.email ?? ""),
+            code: String(t.TeacherCode ?? t.teacherCode ?? ""),
+            status: "active",
+          };
+        })
+        .filter(Boolean) as UserItem[];
+
+      setItems([...tItems, ...sItems]);
+    } catch (e: any) {
+      console.log("Users load error", e?.response?.data || e);
+      setItems([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      load();
+    }, [load]),
+  );
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchUsers();
-  };
-
-  const filtered = users.filter((u) => {
-    const matchRole =
-      roleFilter === "all" || u.role?.toLowerCase() === roleFilter;
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const matchSearch =
-      !q ||
-      u.fullName?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q) ||
-      u.studentId?.toLowerCase().includes(q);
-    return matchRole && matchSearch;
-  });
+    return items.filter((u) => {
+      if (role !== "all" && u.role !== role) return false;
+      if (!q) return true;
+      return (
+        u.fullName.toLowerCase().includes(q) ||
+        u.username.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.code.toLowerCase().includes(q)
+      );
+    });
+  }, [items, search, role]);
 
-  const getRoleBadge = (role: string) => {
-    const r = role?.toLowerCase();
-    if (r === "student")
-      return { label: "Sinh viên", bg: "#DBEAFE", color: "#2563EB" };
-    if (r === "teacher")
-      return { label: "Giảng viên", bg: "#EDE9FE", color: "#5B5BD6" };
-    if (r === "admin")
-      return { label: "Admin", bg: "#FEF3C7", color: "#D97706" };
-    return { label: role || "—", bg: "#F3F4F6", color: "#6B7280" };
-  };
-
-  const handleDelete = (user: UserItem) => {
-    Alert.alert("Xóa người dùng", `Bạn có chắc muốn xóa "${user.fullName}"?`, [
+  const handleDelete = (u: UserItem) => {
+    if (u.role === "student") {
+      Alert.alert(
+        "Không hỗ trợ",
+        "Backend hiện chỉ có xóa giảng viên (DELETE /teachers/:id), chưa có API xóa sinh viên.",
+      );
+      return;
+    }
+    Alert.alert("Xóa giảng viên", `Xóa ${u.fullName} (${u.code})?`, [
       { text: "Hủy", style: "cancel" },
       {
         text: "Xóa",
         style: "destructive",
         onPress: async () => {
           try {
-            await apiClient.delete(`/users/${user.id}`);
-            setUsers((prev) => prev.filter((u) => u.id !== user.id));
-            Alert.alert("Thành công", "Đã xóa người dùng.");
-          } catch (error: any) {
+            await apiClient.delete(`/teachers/${u.id}`);
+            Alert.alert("Thành công", "Đã xóa giảng viên.");
+            load();
+          } catch (e: any) {
+            const d = e?.response?.data;
             Alert.alert(
               "Lỗi",
-              error?.response?.data?.message || "Không thể xóa.",
+              [d?.message, d?.error].filter(Boolean).join("\n") ||
+                "Xóa thất bại.",
             );
           }
         },
@@ -146,80 +144,84 @@ const Users = () => {
   };
 
   const renderItem = ({ item }: { item: UserItem }) => {
-    const badge = getRoleBadge(item.role);
+    const isTeacher = item.role === "teacher";
     return (
       <View style={styles.card}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {(item.fullName || "?").charAt(0)}
+        <View
+          style={[
+            styles.avatar,
+            { backgroundColor: isTeacher ? "#E0E7FF" : "#D1FAE5" },
+          ]}>
+          <Ionicons
+            name={isTeacher ? "person" : "school"}
+            size={20}
+            color={isTeacher ? "#5B5BD6" : "#059669"}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{item.fullName}</Text>
+          <Text style={styles.meta}>
+            {isTeacher ? "GV" : "SV"} · {item.code || "—"} · {item.username}
           </Text>
+          {!!item.email && <Text style={styles.email}>{item.email}</Text>}
         </View>
-        <View style={styles.cardInfo}>
-          <Text style={styles.cardName}>{item.fullName}</Text>
-          <Text style={styles.cardEmail}>{item.email}</Text>
-          {item.studentId ? (
-            <Text style={styles.cardMeta}>MSSV: {item.studentId}</Text>
-          ) : null}
-          {item.major ? (
-            <Text style={styles.cardMeta}>Ngành: {item.major}</Text>
-          ) : null}
-        </View>
-        <View style={styles.cardRight}>
-          <View style={[styles.roleBadge, { backgroundColor: badge.bg }]}>
-            <Text style={[styles.roleText, { color: badge.color }]}>
-              {badge.label}
-            </Text>
-          </View>
+        {isTeacher && (
           <TouchableOpacity
-            onPress={() => handleDelete(item)}
-            hitSlop={8}
-            style={styles.deleteBtn}>
+            style={styles.delBtn}
+            onPress={() => handleDelete(item)}>
             <Ionicons name="trash-outline" size={18} color="#EF4444" />
           </TouchableOpacity>
-        </View>
+        )}
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Quản lý người dùng</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={styles.title}>Người dùng</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => router.push("/(admin)/CreateIdStudent")}>
+            <Ionicons name="person-add" size={18} color="#5B5BD6" />
+            <Text style={styles.addText}>SV</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => router.push("/(admin)/CreateIdTeacher")}>
+            <Ionicons name="person-add" size={18} color="#5B5BD6" />
+            <Text style={styles.addText}>GV</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Search */}
-      <View style={styles.searchWrap}>
+      <View style={styles.searchRow}>
         <Ionicons name="search" size={18} color="#9CA3AF" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Tìm tên, email, MSSV..."
-          placeholderTextColor="#9CA3AF"
+          placeholder="Tìm tên, mã, username..."
           value={search}
           onChangeText={setSearch}
+          placeholderTextColor="#9CA3AF"
         />
       </View>
 
-      {/* Role filters */}
-      <View style={styles.filterRow}>
-        {ROLE_FILTERS.map((f) => (
+      <View style={styles.filters}>
+        {(
+          [
+            ["all", "Tất cả"],
+            ["student", "Sinh viên"],
+            ["teacher", "Giảng viên"],
+          ] as const
+        ).map(([v, label]) => (
           <TouchableOpacity
-            key={f.value}
-            style={[
-              styles.filterChip,
-              roleFilter === f.value && styles.filterChipActive,
-            ]}
-            onPress={() => setRoleFilter(f.value)}>
-            <Text
-              style={[
-                styles.filterText,
-                roleFilter === f.value && styles.filterTextActive,
-              ]}>
-              {f.label}
+            key={v}
+            style={[styles.chip, role === v && styles.chipOn]}
+            onPress={() => setRole(v)}>
+            <Text style={[styles.chipText, role === v && styles.chipTextOn]}>
+              {label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -232,22 +234,21 @@ const Users = () => {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(i) => `${i.role}-${i.id}`}
           renderItem={renderItem}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={onRefresh}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
               colors={["#5B5BD6"]}
-              tintColor="#5B5BD6"
             />
           }
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="people-outline" size={56} color="#D1D5DB" />
-              <Text style={styles.emptyText}>Không có người dùng</Text>
-            </View>
+            <Text style={styles.empty}>Không có người dùng</Text>
           }
         />
       )}
@@ -258,96 +259,81 @@ const Users = () => {
 export default Users;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
+  safe: { flex: 1, backgroundColor: "#F3EEFF" },
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
+    paddingVertical: 12,
+    backgroundColor: "#FFF",
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  backBtn: { width: 40, height: 40, justifyContent: "center" },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#1A1A1A",
-  },
-  headerSpacer: { width: 40 },
-  searchWrap: {
+  title: { fontSize: 20, fontWeight: "800", color: "#1A1A1A" },
+  headerActions: { flexDirection: "row", gap: 8 },
+  addBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 16,
-    marginTop: 12,
+    gap: 4,
+    backgroundColor: "#EDE9FE",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  addText: { color: "#5B5BD6", fontWeight: "700", fontSize: 13 },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    margin: 16,
+    marginBottom: 8,
+    backgroundColor: "#FFF",
     borderRadius: 12,
     paddingHorizontal: 12,
-    height: 44,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    gap: 8,
+    height: 44,
   },
-  searchInput: { flex: 1, fontSize: 14, color: "#1A1A1A" },
-  filterRow: {
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 15 },
+  filters: {
     flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
-  filterChip: {
-    paddingHorizontal: 14,
+  chip: {
+    paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#FFF",
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  filterChipActive: {
-    backgroundColor: "#5B5BD6",
-    borderColor: "#5B5BD6",
-  },
-  filterText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
-  filterTextActive: { color: "#FFFFFF" },
-  list: { paddingHorizontal: 16, paddingBottom: 32 },
+  chipOn: { backgroundColor: "#5B5BD6", borderColor: "#5B5BD6" },
+  chipText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
+  chipTextOn: { color: "#FFF" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  empty: { textAlign: "center", color: "#9CA3AF", marginTop: 40 },
   card: {
     flexDirection: "row",
-    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    backgroundColor: "#FFF",
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+    gap: 12,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#EDE9FE",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
   },
-  avatarText: { fontSize: 18, fontWeight: "700", color: "#5B5BD6" },
-  cardInfo: { flex: 1 },
-  cardName: { fontSize: 15, fontWeight: "600", color: "#1A1A1A" },
-  cardEmail: { fontSize: 12, color: "#6B7280", marginTop: 2 },
-  cardMeta: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
-  cardRight: { alignItems: "flex-end", gap: 8 },
-  roleBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  roleText: { fontSize: 11, fontWeight: "600" },
-  deleteBtn: { padding: 4 },
-  empty: { alignItems: "center", paddingTop: 60 },
-  emptyText: { fontSize: 15, color: "#9CA3AF", marginTop: 10 },
+  name: { fontSize: 15, fontWeight: "700", color: "#1A1A1A" },
+  meta: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  email: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  delBtn: { padding: 8 },
 });

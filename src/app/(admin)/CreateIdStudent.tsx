@@ -19,13 +19,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/**
- * POST /students
- * CreateStudentRequest:
- *   username*, fullName*, classId*
- *   password?, email?, studentCode? (backend tự sinh), dateOfBirth?, gender?, phone?, address?, enrollmentDate?, status?
- */
-
 type ClassItem = { id: number; label: string };
 
 const CreateIdStudent: React.FC = () => {
@@ -184,10 +177,6 @@ const CreateIdStudent: React.FC = () => {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled">
-          <Text style={styles.hint}>
-            Backend tự sinh mã SV. Bắt buộc: username, họ tên, lớp.
-          </Text>
-
           <Text style={styles.label}>Username *</Text>
           <TextInput
             style={styles.input}

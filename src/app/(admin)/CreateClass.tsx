@@ -19,13 +19,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/**
- * POST /classes
- * CreateClassRequest:
- *   majorId*, semesterId*, roomId*
- *   classCode? (auto), teacherId?, maxStudents?, status?, schedules?
- */
-
 type MetaItem = { id: number; label: string };
 type PickerKind = "major" | "semester" | "room" | "teacher" | null;
 
@@ -242,7 +235,7 @@ const CreateClass: React.FC = () => {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled">
           <Text style={styles.hint}>
-            Backend tự sinh mã lớp. Bắt buộc: chuyên ngành, học kỳ, phòng.
+            Tự sinh mã lớp. Bắt buộc: chuyên ngành, học kỳ, phòng.
           </Text>
 
           <Field

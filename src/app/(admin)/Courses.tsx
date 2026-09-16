@@ -5,9 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -19,124 +17,100 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-interface CourseItem {
+/**
+ * GET/POST /courses
+ * PUT/DELETE /courses/:id
+ * CourseRequest: code*, name*, credits*, majorId*, semesterId*, isActive?
+ */
+
+type MetaItem = { id: number; label: string };
+type CourseItem = {
   id: number;
-  courseCode: string;
-  courseName: string;
+  code: string;
+  name: string;
   credits: number;
-  department?: string;
-  description?: string;
-}
-
-type FormState = {
-  courseCode: string;
-  courseName: string;
-  credits: string;
-  department: string;
-  description: string;
+  majorId: number;
+  semesterId: number;
+  majorName?: string;
+  semesterName?: string;
+  isActive: boolean;
 };
 
-const emptyForm: FormState = {
-  courseCode: "",
-  courseName: "",
-  credits: "",
-  department: "",
-  description: "",
-};
-
-const normalizeCourse = (raw: any): CourseItem | null => {
-  const id = Number(raw?.id ?? raw?.ID ?? raw?.Id);
-  if (!id || Number.isNaN(id)) return null;
-
-  const courseCode = String(
-    raw?.courseCode ??
-      raw?.CourseCode ??
-      raw?.code ??
-      raw?.Code ??
-      raw?.course_code ??
-      "",
-  ).trim();
-
-  const courseName = String(
-    raw?.courseName ??
-      raw?.CourseName ??
-      raw?.name ??
-      raw?.Name ??
-      raw?.course_name ??
-      "",
-  ).trim();
-
-  const credits = Number(
-    raw?.credits ?? raw?.Credits ?? raw?.credit ?? raw?.Credit ?? 0,
-  );
-
-  const department =
-    raw?.department ??
-    raw?.Department ??
-    raw?.faculty ??
-    raw?.Faculty ??
-    raw?.majorName ??
-    undefined;
-
-  const description =
-    raw?.description ?? raw?.Description ?? raw?.desc ?? undefined;
-
-  return {
-    id,
-    courseCode: courseCode || `MH-${id}`,
-    courseName: courseName || "Chưa đặt tên",
-    credits: Number.isFinite(credits) && credits > 0 ? credits : 0,
-    department: department ? String(department) : undefined,
-    description: description ? String(description) : undefined,
-  };
-};
-
-const extractError = (error: any, fallback: string) => {
-  const data = error?.response?.data;
-  if (!error?.response) {
-    return "Không kết nối được server. Kiểm tra mạng / IP backend.";
-  }
-  if (error.response.status === 401 || error.response.status === 403) {
-    return "Bạn chưa đăng nhập hoặc không có quyền admin.";
-  }
-  if (typeof data?.message === "string") return data.message;
-  if (typeof data?.error === "string") return data.error;
-  if (Array.isArray(data?.message)) return data.message.join("\n");
-  return fallback;
-};
-
-const Courses = () => {
-  const [courses, setCourses] = useState<CourseItem[]>([]);
+const Courses: React.FC = () => {
+  const [list, setList] = useState<CourseItem[]>([]);
+  const [majors, setMajors] = useState<MetaItem[]>([]);
+  const [semesters, setSemesters] = useState<MetaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [showModal, setShowModal] = useState(false);
+  const [modal, setModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<CourseItem | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    code: "",
+    name: "",
+    credits: "3",
+    majorId: 0,
+    semesterId: 0,
+  });
+  const [picker, setPicker] = useState<"major" | "semester" | null>(null);
 
-  const fetchCourses = useCallback(async () => {
+  const mapCourse = (raw: any): CourseItem | null => {
+    const id = Number(raw?.ID ?? raw?.id);
+    if (!id) return null;
+    return {
+      id,
+      code: String(raw?.Code ?? raw?.code ?? ""),
+      name: String(raw?.Name ?? raw?.name ?? ""),
+      credits: Number(raw?.Credits ?? raw?.credits ?? 0),
+      majorId: Number(raw?.MajorID ?? raw?.majorId ?? raw?.Major?.ID ?? 0),
+      semesterId: Number(
+        raw?.SemesterID ?? raw?.semesterId ?? raw?.Semester?.ID ?? 0,
+      ),
+      majorName: raw?.Major?.Name ?? raw?.Major?.name ?? raw?.major?.name,
+      semesterName:
+        raw?.Semester?.Name ?? raw?.Semester?.name ?? raw?.semester?.name,
+      isActive: raw?.IsActive ?? raw?.isActive ?? true,
+    };
+  };
+
+  const loadMeta = useCallback(async () => {
     try {
-      setFetchError(null);
+      const res = await apiClient.get("/metadata");
+      const d = res.data?.data ?? {};
+      setMajors(
+        (d.majors || [])
+          .map((m: any) => ({
+            id: Number(m.ID ?? m.id),
+            label: String(m.Name ?? m.name ?? m.Code ?? m.code ?? ""),
+          }))
+          .filter((x: MetaItem) => x.id > 0),
+      );
+      setSemesters(
+        (d.semesters || [])
+          .map((s: any) => ({
+            id: Number(s.ID ?? s.id),
+            label: String(s.Name ?? s.name ?? `HK ${s.ID ?? s.id}`),
+          }))
+          .filter((x: MetaItem) => x.id > 0),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
       const res = await apiClient.get("/courses");
       const raw = res.data?.data ?? res.data ?? [];
-      const list = Array.isArray(raw)
-        ? raw
-        : Array.isArray(raw?.items)
-          ? raw.items
-          : Array.isArray(raw?.courses)
-            ? raw.courses
-            : [];
-
-      const normalized = list
-        .map(normalizeCourse)
-        .filter((c: CourseItem | null): c is CourseItem => c !== null);
-
-      setCourses(normalized);
-    } catch (error: any) {
-      setFetchError(extractError(error, "Không tải được danh sách môn học."));
-      setCourses([]);
+      setList(
+        (Array.isArray(raw) ? raw : [])
+          .map(mapCourse)
+          .filter(Boolean) as CourseItem[],
+      );
+    } catch (e: any) {
+      console.log("courses error", e?.response?.data);
+      setList([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -144,238 +118,143 @@ const Courses = () => {
   }, []);
 
   useEffect(() => {
-    fetchCourses();
-  }, [fetchCourses]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchCourses();
-  };
+    loadMeta();
+    load();
+  }, [load, loadMeta]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return courses;
-    return courses.filter(
+    if (!q) return list;
+    return list.filter(
       (c) =>
-        c.courseName.toLowerCase().includes(q) ||
-        c.courseCode.toLowerCase().includes(q) ||
-        (c.department || "").toLowerCase().includes(q),
+        c.code.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        (c.majorName || "").toLowerCase().includes(q),
     );
-  }, [courses, search]);
+  }, [list, search]);
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm);
-    setShowModal(true);
-  };
-
-  const openEdit = (course: CourseItem) => {
-    setEditing(course);
     setForm({
-      courseCode: course.courseCode,
-      courseName: course.courseName,
-      credits: course.credits ? String(course.credits) : "",
-      department: course.department || "",
-      description: course.description || "",
+      code: "",
+      name: "",
+      credits: "3",
+      majorId: majors[0]?.id || 0,
+      semesterId: semesters[0]?.id || 0,
     });
-    setShowModal(true);
+    setModal(true);
   };
 
-  const closeModal = () => {
-    setShowModal(false);
-    setEditing(null);
-    setForm(emptyForm);
+  const openEdit = (c: CourseItem) => {
+    setEditing(c);
+    setForm({
+      code: c.code,
+      name: c.name,
+      credits: String(c.credits || 3),
+      majorId: c.majorId,
+      semesterId: c.semesterId,
+    });
+    setModal(true);
   };
 
-  const setField = <K extends keyof FormState>(key: K, value: string) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const validate = () => {
-    if (!form.courseCode.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập mã môn học.");
-      return false;
+  const handleSave = async () => {
+    const code = form.code.trim();
+    const name = form.name.trim();
+    const credits = Number(form.credits);
+    if (!code || !name) {
+      Alert.alert("Thiếu thông tin", "Nhập mã môn và tên môn.");
+      return;
     }
-    if (!form.courseName.trim()) {
-      Alert.alert("Thiếu thông tin", "Vui lòng nhập tên môn học.");
-      return false;
+    if (!credits || credits <= 0) {
+      Alert.alert("Sai", "Số tín chỉ phải > 0.");
+      return;
     }
-    const creditsNum = Number(form.credits);
-    if (!form.credits.trim() || isNaN(creditsNum) || creditsNum <= 0) {
-      Alert.alert("Sai định dạng", "Số tín chỉ phải là số dương.");
-      return false;
+    if (!form.majorId || !form.semesterId) {
+      Alert.alert("Thiếu thông tin", "Chọn chuyên ngành và học kỳ.");
+      return;
     }
-    return true;
-  };
 
-  const buildPayload = () => {
-    const creditsNum = Number(form.credits);
-    const payload: Record<string, any> = {
-      courseCode: form.courseCode.trim(),
-      courseName: form.courseName.trim(),
-      credits: creditsNum,
-      code: form.courseCode.trim(),
-      name: form.courseName.trim(),
-      CourseCode: form.courseCode.trim(),
-      CourseName: form.courseName.trim(),
-      Credits: creditsNum,
+    const payload = {
+      code,
+      name,
+      credits,
+      majorId: form.majorId,
+      semesterId: form.semesterId,
+      isActive: true,
     };
-    if (form.department.trim()) {
-      payload.department = form.department.trim();
-      payload.Department = form.department.trim();
-    }
-    if (form.description.trim()) {
-      payload.description = form.description.trim();
-      payload.Description = form.description.trim();
-    }
-    return payload;
-  };
 
-  const handleSubmit = async () => {
-    if (!validate()) return;
-
-    setSubmitting(true);
+    setSaving(true);
     try {
-      const payload = buildPayload();
-
       if (editing) {
         await apiClient.put(`/courses/${editing.id}`, payload);
-        Alert.alert("Thành công", "Cập nhật môn học thành công!");
+        Alert.alert("Thành công", "Đã cập nhật môn học.");
       } else {
         await apiClient.post("/courses", payload);
-        Alert.alert("Thành công", "Tạo môn học thành công!");
+        Alert.alert("Thành công", "Đã thêm môn học.");
       }
-
-      closeModal();
-      fetchCourses();
-    } catch (error: any) {
+      setModal(false);
+      load();
+    } catch (e: any) {
+      const d = e?.response?.data;
       Alert.alert(
         "Lỗi",
-        extractError(
-          error,
-          editing ? "Không thể cập nhật môn học." : "Không thể tạo môn học.",
-        ),
+        [d?.message, d?.error].filter(Boolean).join("\n") || "Lưu thất bại.",
       );
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   };
 
-  const handleDelete = (course: CourseItem) => {
-    Alert.alert(
-      "Xóa môn học",
-      `Bạn có chắc muốn xóa "${course.courseName}" (${course.courseCode})?`,
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Xóa",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await apiClient.delete(`/courses/${course.id}`);
-              setCourses((prev) => prev.filter((c) => c.id !== course.id));
-              Alert.alert("Thành công", "Đã xóa môn học.");
-            } catch (error: any) {
-              Alert.alert("Lỗi", extractError(error, "Không thể xóa môn học."));
-            }
-          },
+  const handleDelete = (c: CourseItem) => {
+    Alert.alert("Xóa môn học", `Xóa ${c.code} — ${c.name}?`, [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Xóa",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await apiClient.delete(`/courses/${c.id}`);
+            Alert.alert("Thành công", "Đã xóa môn học.");
+            load();
+          } catch (e: any) {
+            const d = e?.response?.data;
+            Alert.alert(
+              "Lỗi",
+              [d?.message, d?.error].filter(Boolean).join("\n") ||
+                "Xóa thất bại (có thể môn đã có SV đăng ký).",
+            );
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
-  const renderItem = ({ item }: { item: CourseItem }) => (
-    <View style={styles.card}>
-      <View style={styles.cardTop}>
-        <View style={styles.codeBadge}>
-          <Text style={styles.codeText}>{item.courseCode}</Text>
-        </View>
-        <View style={styles.creditBadge}>
-          <Text style={styles.creditText}>
-            {item.credits > 0 ? `${item.credits} TC` : "— TC"}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.courseName}>{item.courseName}</Text>
-
-      {item.department ? (
-        <View style={styles.metaRow}>
-          <Ionicons name="business-outline" size={14} color="#6B7280" />
-          <Text style={styles.metaText}>{item.department}</Text>
-        </View>
-      ) : null}
-
-      {item.description ? (
-        <Text style={styles.description} numberOfLines={2}>
-          {item.description}
-        </Text>
-      ) : null}
-
-      <View style={styles.cardActions}>
-        <TouchableOpacity
-          style={styles.editAction}
-          onPress={() => openEdit(item)}
-          activeOpacity={0.7}>
-          <Ionicons name="create-outline" size={16} color="#5B5BD6" />
-          <Text style={styles.editActionText}>Sửa</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.deleteAction}
-          onPress={() => handleDelete(item)}
-          activeOpacity={0.7}>
-          <Ionicons name="trash-outline" size={16} color="#EF4444" />
-          <Text style={styles.deleteActionText}>Xóa</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+  const majorLabel =
+    majors.find((m) => m.id === form.majorId)?.label || "Chọn ngành...";
+  const semesterLabel =
+    semesters.find((s) => s.id === form.semesterId)?.label || "Chọn học kỳ...";
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
-
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Quản lý môn học</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={openCreate}
-          activeOpacity={0.8}>
-          <Ionicons name="add" size={22} color="#FFFFFF" />
+        <Text style={styles.title}>Môn học</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={openCreate}>
+          <Ionicons name="add" size={22} color="#FFF" />
+          <Text style={styles.addText}>Thêm</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.searchWrap}>
+      <View style={styles.searchRow}>
         <Ionicons name="search" size={18} color="#9CA3AF" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Tìm mã môn, tên môn, khoa..."
-          placeholderTextColor="#9CA3AF"
+          placeholder="Tìm mã / tên môn..."
           value={search}
           onChangeText={setSearch}
+          placeholderTextColor="#9CA3AF"
         />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch("")}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-          </TouchableOpacity>
-        )}
       </View>
-
-      <View style={styles.countRow}>
-        <Text style={styles.countText}>{filtered.length} môn học</Text>
-        {fetchError ? (
-          <TouchableOpacity onPress={onRefresh}>
-            <Text style={styles.retryText}>Thử lại</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-
-      {fetchError ? (
-        <View style={styles.errorBanner}>
-          <Ionicons name="warning-outline" size={16} color="#B45309" />
-          <Text style={styles.errorBannerText}>{fetchError}</Text>
-        </View>
-      ) : null}
 
       {loading ? (
         <View style={styles.center}>
@@ -384,127 +263,149 @@ const Courses = () => {
       ) : (
         <FlatList
           data={filtered}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
+          keyExtractor={(i) => String(i.id)}
+          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={onRefresh}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
               colors={["#5B5BD6"]}
-              tintColor="#5B5BD6"
             />
           }
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="book-outline" size={56} color="#D1D5DB" />
-              <Text style={styles.emptyText}>
-                {fetchError
-                  ? "Không tải được dữ liệu từ server"
-                  : search
-                    ? "Không tìm thấy môn học phù hợp"
-                    : "Chưa có môn học nào"}
-              </Text>
-              {!fetchError && !search ? (
-                <TouchableOpacity style={styles.emptyBtn} onPress={openCreate}>
-                  <Text style={styles.emptyBtnText}>
-                    + Tạo môn học đầu tiên
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
+          ListEmptyComponent={<Text style={styles.empty}>Chưa có môn học</Text>}
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.code}>{item.code}</Text>
+                <Text style={styles.name}>{item.name}</Text>
+                <Text style={styles.meta}>
+                  {item.credits} TC
+                  {item.majorName ? ` · ${item.majorName}` : ""}
+                  {item.semesterName ? ` · ${item.semesterName}` : ""}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => openEdit(item)}>
+                <Ionicons name="create-outline" size={20} color="#5B5BD6" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => handleDelete(item)}>
+                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+              </TouchableOpacity>
             </View>
-          }
+          )}
         />
       )}
 
-      <Modal visible={showModal} transparent animationType="slide">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
+      <Modal visible={modal} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <View style={styles.modalHead}>
               <Text style={styles.modalTitle}>
-                {editing ? "Sửa môn học" : "Tạo môn học mới"}
+                {editing ? "Sửa môn học" : "Thêm môn học"}
               </Text>
-              <TouchableOpacity onPress={closeModal} hitSlop={12}>
+              <TouchableOpacity onPress={() => setModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
-
             <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}>
-              <Text style={styles.inputLabel}>Mã môn học *</Text>
+              contentContainerStyle={{ padding: 16 }}
+              keyboardShouldPersistTaps="handled">
+              <Text style={styles.label}>Mã môn *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="VD: CSDL202"
-                placeholderTextColor="#9CA3AF"
-                value={form.courseCode}
-                onChangeText={(t) => setField("courseCode", t)}
+                value={form.code}
+                onChangeText={(v) => setForm((p) => ({ ...p, code: v }))}
                 autoCapitalize="characters"
+                placeholder="CSDL301"
+                placeholderTextColor="#9CA3AF"
               />
-
-              <Text style={styles.inputLabel}>Tên môn học *</Text>
+              <Text style={styles.label}>Tên môn *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="VD: Database Systems"
+                value={form.name}
+                onChangeText={(v) => setForm((p) => ({ ...p, name: v }))}
+                placeholder="Cơ sở dữ liệu"
                 placeholderTextColor="#9CA3AF"
-                value={form.courseName}
-                onChangeText={(t) => setField("courseName", t)}
               />
-
-              <Text style={styles.inputLabel}>Số tín chỉ *</Text>
+              <Text style={styles.label}>Tín chỉ *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="VD: 3"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="numeric"
                 value={form.credits}
-                onChangeText={(t) => setField("credits", t)}
-              />
-
-              <Text style={styles.inputLabel}>Khoa / Bộ môn</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="VD: Công nghệ thông tin"
+                onChangeText={(v) => setForm((p) => ({ ...p, credits: v }))}
+                keyboardType="numeric"
                 placeholderTextColor="#9CA3AF"
-                value={form.department}
-                onChangeText={(t) => setField("department", t)}
               />
-
-              <Text style={styles.inputLabel}>Mô tả</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Mô tả ngắn về môn học..."
-                placeholderTextColor="#9CA3AF"
-                value={form.description}
-                onChangeText={(t) => setField("description", t)}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={closeModal}>
-                <Text style={styles.cancelText}>Hủy</Text>
-              </TouchableOpacity>
+              <Text style={styles.label}>Chuyên ngành (majorId) *</Text>
               <TouchableOpacity
-                style={[styles.saveBtn, submitting && { opacity: 0.7 }]}
-                onPress={handleSubmit}
-                disabled={submitting}>
-                {submitting ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                style={styles.select}
+                onPress={() => setPicker("major")}>
+                <Text style={styles.selectText}>{majorLabel}</Text>
+                <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+              <Text style={styles.label}>Học kỳ (semesterId) *</Text>
+              <TouchableOpacity
+                style={styles.select}
+                onPress={() => setPicker("semester")}>
+                <Text style={styles.selectText}>{semesterLabel}</Text>
+                <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+                onPress={handleSave}
+                disabled={saving}>
+                {saving ? (
+                  <ActivityIndicator color="#FFF" />
                 ) : (
                   <Text style={styles.saveText}>
-                    {editing ? "Lưu thay đổi" : "Tạo môn học"}
+                    {editing ? "Cập nhật" : "Thêm môn"}
                   </Text>
                 )}
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
-        </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <Modal visible={!!picker} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={[styles.modal, { maxHeight: "50%" }]}>
+            <View style={styles.modalHead}>
+              <Text style={styles.modalTitle}>
+                {picker === "major" ? "Chuyên ngành" : "Học kỳ"}
+              </Text>
+              <TouchableOpacity onPress={() => setPicker(null)}>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={picker === "major" ? majors : semesters}
+              keyExtractor={(i) => String(i.id)}
+              ListEmptyComponent={
+                <Text style={styles.empty}>Không có dữ liệu /metadata</Text>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.pickRow}
+                  onPress={() => {
+                    if (picker === "major")
+                      setForm((p) => ({ ...p, majorId: item.id }));
+                    else setForm((p) => ({ ...p, semesterId: item.id }));
+                    setPicker(null);
+                  }}>
+                  <Text style={styles.name}>{item.label}</Text>
+                  <Text style={styles.meta}>ID: {item.id}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -513,201 +414,110 @@ const Courses = () => {
 export default Courses;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
+  safe: { flex: 1, backgroundColor: "#F3EEFF" },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#FFF",
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1A1A1A",
-  },
+  title: { fontSize: 20, fontWeight: "800" },
   addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "#5B5BD6",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  searchWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    marginHorizontal: 16,
-    marginTop: 12,
+    gap: 4,
+    backgroundColor: "#5B5BD6",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  addText: { color: "#FFF", fontWeight: "700" },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    margin: 16,
+    marginBottom: 8,
+    backgroundColor: "#FFF",
     borderRadius: 12,
     paddingHorizontal: 12,
-    height: 44,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    gap: 8,
+    height: 44,
   },
-  searchInput: { flex: 1, fontSize: 14, color: "#1A1A1A" },
-  countRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  countText: { fontSize: 13, color: "#6B7280" },
-  retryText: { fontSize: 13, fontWeight: "600", color: "#5B5BD6" },
-  errorBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    backgroundColor: "#FEF3C7",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  errorBannerText: { flex: 1, fontSize: 12, color: "#92400E", lineHeight: 16 },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 15 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  list: { paddingHorizontal: 16, paddingBottom: 32 },
+  empty: { textAlign: "center", color: "#9CA3AF", marginTop: 40 },
   card: {
-    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF",
     borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
   },
-  cardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  codeBadge: {
-    backgroundColor: "#EDE9FE",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  codeText: { fontSize: 12, fontWeight: "700", color: "#5B5BD6" },
-  creditBadge: {
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  creditText: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
-  courseName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 6,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 4,
-  },
-  metaText: { fontSize: 13, color: "#6B7280" },
-  description: {
-    fontSize: 13,
-    color: "#9CA3AF",
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  cardActions: {
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-    marginTop: 12,
-    paddingTop: 10,
-    flexDirection: "row",
-    gap: 20,
-  },
-  editAction: { flexDirection: "row", alignItems: "center", gap: 4 },
-  editActionText: { fontSize: 13, color: "#5B5BD6", fontWeight: "600" },
-  deleteAction: { flexDirection: "row", alignItems: "center", gap: 4 },
-  deleteActionText: { fontSize: 13, color: "#EF4444", fontWeight: "600" },
-  empty: { alignItems: "center", paddingTop: 60, paddingHorizontal: 24 },
-  emptyText: {
-    fontSize: 15,
-    color: "#9CA3AF",
-    marginTop: 10,
-    textAlign: "center",
-  },
-  emptyBtn: {
-    marginTop: 16,
-    backgroundColor: "#5B5BD6",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  emptyBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
-
-  modalOverlay: {
+  code: { fontSize: 13, fontWeight: "700", color: "#5B5BD6" },
+  name: { fontSize: 15, fontWeight: "700", color: "#1A1A1A", marginTop: 2 },
+  meta: { fontSize: 12, color: "#9CA3AF", marginTop: 4 },
+  iconBtn: { padding: 8 },
+  overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
-  modalCard: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 36,
-    maxHeight: "90%",
+  modal: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "85%",
   },
-  modalHeader: {
+  modalHead: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 14,
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1A1A1A",
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 6,
-  },
+  modalTitle: { fontSize: 17, fontWeight: "700" },
+  label: { fontSize: 13, fontWeight: "600", marginBottom: 8, color: "#374151" },
   input: {
-    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    marginBottom: 12,
     fontSize: 15,
-    color: "#1A1A1A",
-    marginBottom: 14,
   },
-  textArea: { height: 80, paddingTop: 12 },
-  modalActions: { flexDirection: "row", gap: 12, marginTop: 8 },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+  select: {
+    flexDirection: "row",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 12,
   },
-  cancelText: { fontSize: 15, fontWeight: "600", color: "#6B7280" },
+  selectText: { flex: 1, fontSize: 15 },
   saveBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
     backgroundColor: "#5B5BD6",
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: "center",
+    marginTop: 8,
+    marginBottom: 24,
   },
-  saveText: { fontSize: 15, fontWeight: "600", color: "#FFFFFF" },
+  saveText: { color: "#FFF", fontWeight: "700", fontSize: 16 },
+  pickRow: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
 });

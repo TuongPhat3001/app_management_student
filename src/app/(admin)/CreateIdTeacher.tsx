@@ -17,13 +17,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/**
- * POST /teachers
- * CreateTeacherRequest:
- *   username*, fullName*, teacherCode*
- *   password?, email?, phone?, address?, qualification?
- */
-
 const CreateIdTeacher: React.FC = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -40,6 +33,7 @@ const CreateIdTeacher: React.FC = () => {
   const [created, setCreated] = useState<{
     teacherCode?: string;
     username?: string;
+    email?: string;
     defaultPassword?: string;
   } | null>(null);
 
@@ -47,33 +41,43 @@ const CreateIdTeacher: React.FC = () => {
     setForm((p) => ({ ...p, [k]: v }));
 
   const handleSubmit = async () => {
-    if (!form.username.trim()) {
+    const username = form.username.trim();
+    const fullName = form.fullName.trim();
+    const teacherCode = form.teacherCode.trim().toUpperCase();
+    const password = form.password.trim();
+    let email = form.email.trim().toLowerCase();
+
+    if (!username) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập username.");
       return;
     }
-    if (!form.fullName.trim()) {
+    if (!fullName) {
       Alert.alert("Thiếu thông tin", "Vui lòng nhập họ tên.");
       return;
     }
-    if (!form.teacherCode.trim()) {
+    if (!teacherCode) {
       Alert.alert(
         "Thiếu thông tin",
         "Vui lòng nhập mã giảng viên (teacherCode).",
       );
       return;
     }
-    if (form.password.trim() && form.password.trim().length < 6) {
+    if (password && password.length < 6) {
       Alert.alert("Sai", "Mật khẩu tối thiểu 6 ký tự.");
       return;
     }
 
+    if (!email) {
+      email = `${username.replace(/\s+/g, ".")}@teacher.local`;
+    }
+
     const payload: Record<string, any> = {
-      username: form.username.trim(),
-      fullName: form.fullName.trim(),
-      teacherCode: form.teacherCode.trim(),
+      username,
+      fullName,
+      teacherCode,
+      email,
     };
-    if (form.password.trim()) payload.password = form.password.trim();
-    if (form.email.trim()) payload.email = form.email.trim();
+    if (password) payload.password = password;
     if (form.phone.trim()) payload.phone = form.phone.trim();
     if (form.address.trim()) payload.address = form.address.trim();
     if (form.qualification.trim())
@@ -84,19 +88,22 @@ const CreateIdTeacher: React.FC = () => {
     try {
       const res = await apiClient.post("/teachers", payload);
       const data = res.data?.data ?? {};
-      const code =
-        data?.TeacherCode ?? data?.teacherCode ?? form.teacherCode.trim();
-      const pwd =
-        res.data?.defaultPassword || form.password.trim() || "Teacher@123";
+      const code = data?.TeacherCode ?? data?.teacherCode ?? teacherCode;
+      const pwd = res.data?.defaultPassword || password || "Teacher@123";
+      const savedEmail = data?.User?.Email ?? data?.User?.email ?? email;
+
       setCreated({
         teacherCode: code,
-        username: form.username.trim(),
+        username,
+        email: savedEmail,
         defaultPassword: pwd,
       });
+
       Alert.alert(
         "Thành công",
-        res.data?.message || "Tạo giảng viên thành công",
+        res.data?.message || `Đã tạo GV ${code}\nUser: ${username}\nMK: ${pwd}`,
       );
+
       setForm({
         username: "",
         password: "",
@@ -108,12 +115,27 @@ const CreateIdTeacher: React.FC = () => {
         qualification: "",
       });
     } catch (e: any) {
+      const status = e?.response?.status;
       const d = e?.response?.data;
-      Alert.alert(
-        "Lỗi",
+      let msg =
         [d?.message, d?.error].filter(Boolean).join("\n") ||
-          "Tạo giảng viên thất bại.",
-      );
+        "Tạo giảng viên thất bại.";
+
+      if (!e?.response) {
+        msg =
+          "Không kết nối server. Kiểm tra IP trong axios / backend đang chạy.";
+      } else if (status === 401 || status === 403) {
+        msg =
+          "Phiên đăng nhập hết hạn hoặc không có quyền admin. Đăng nhập lại.";
+      } else if (status === 404) {
+        msg =
+          "API POST /teachers không tồn tại. Kiểm tra route backend CreateTeacher.";
+      } else if (/duplicate|unique|tồn tại|already|Duplicate/i.test(msg)) {
+        msg =
+          "Username, email hoặc mã GV đã tồn tại.\nĐổi username / teacherCode / email rồi thử lại.";
+      }
+
+      Alert.alert("Lỗi", msg);
     } finally {
       setLoading(false);
     }
@@ -136,16 +158,13 @@ const CreateIdTeacher: React.FC = () => {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled">
-          <Text style={styles.hint}>
-            Bắt buộc: username, họ tên, mã GV. Mật khẩu trống = Teacher@123.
-          </Text>
-
           <Text style={styles.label}>Username *</Text>
           <TextInput
             style={styles.input}
             value={form.username}
             onChangeText={(v) => set("username", v)}
             autoCapitalize="none"
+            autoCorrect={false}
             placeholder="gv001"
             placeholderTextColor="#9CA3AF"
           />
@@ -165,6 +184,7 @@ const CreateIdTeacher: React.FC = () => {
             value={form.teacherCode}
             onChangeText={(v) => set("teacherCode", v)}
             autoCapitalize="characters"
+            autoCorrect={false}
             placeholder="GV001"
             placeholderTextColor="#9CA3AF"
           />
@@ -179,13 +199,15 @@ const CreateIdTeacher: React.FC = () => {
             placeholderTextColor="#9CA3AF"
           />
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>Email (tuỳ chọn)</Text>
           <TextInput
             style={styles.input}
             value={form.email}
             onChangeText={(v) => set("email", v)}
             autoCapitalize="none"
             keyboardType="email-address"
+            autoCorrect={false}
+            placeholder="vd: gv001@school.edu"
             placeholderTextColor="#9CA3AF"
           />
 
@@ -217,9 +239,10 @@ const CreateIdTeacher: React.FC = () => {
 
           {created && (
             <View style={styles.result}>
-              <Text style={styles.resultTitle}>Đã tạo</Text>
+              <Text style={styles.resultTitle}>Đã tạo giảng viên</Text>
               <Text>Mã GV: {created.teacherCode}</Text>
               <Text>Username: {created.username}</Text>
+              <Text>Email: {created.email}</Text>
               <Text>Mật khẩu: {created.defaultPassword}</Text>
             </View>
           )}
@@ -279,6 +302,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 14,
     fontSize: 15,
+    color: "#1A1A1A",
   },
   result: {
     backgroundColor: "#D1FAE5",
