@@ -377,7 +377,6 @@ const ViewSchedule: React.FC = () => {
       if (!token) return;
       const tokenKey = String(token).slice(-24);
 
-      // 1) Dùng cache trước → mở tab gần như tức thì
       if (
         !isRefresh &&
         scheduleCache &&
@@ -404,7 +403,6 @@ const ViewSchedule: React.FC = () => {
         const raw = response?.data?.data ?? response?.data ?? [];
         const rows = Array.isArray(raw) ? raw : [];
 
-        // Parse nhanh, một vòng
         const { map, total } = buildScheduleMap(rows);
 
         scheduleCache = { tokenKey, map, total, at: Date.now() };
@@ -453,7 +451,6 @@ const ViewSchedule: React.FC = () => {
   }, [fetchSchedule]);
 
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
-  // Chỉ tính lưới tuần/tháng khi đang xem mode đó — tiết kiệm khi nhiều môn
   const weeksInMonth = useMemo(
     () =>
       viewMode === "week" || viewMode === "month"

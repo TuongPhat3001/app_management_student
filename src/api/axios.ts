@@ -26,10 +26,18 @@
 // });
 
 // export default apiClient;
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as SecureStore from "expo-secure-store";
-import { Platform } from "react-native";
+import { LogBox, Platform } from "react-native";
+
+LogBox.ignoreLogs([
+  "AxiosError",
+  "status code 404",
+  "Request failed with status code 404",
+  "Uncaught (in promise",
+]);
 
 const API_BASE = "http://192.168.20.16:8080";
 
@@ -42,84 +50,77 @@ const apiClient = axios.create({
 });
 
 let memoryToken: string | null = null;
-let tokenLoaded = false;
+let tokenReady = false;
 
 export function setApiToken(token: string | null) {
   memoryToken = token;
-  tokenLoaded = true;
+  tokenReady = true;
 }
 
 export function getApiToken() {
   return memoryToken;
 }
 
-async function resolveToken(): Promise<string | null> {
-  if (tokenLoaded) return memoryToken;
+async function loadToken(): Promise<string | null> {
+  if (tokenReady) return memoryToken;
   try {
-    const token =
-      Platform.OS === "web"
-        ? (await AsyncStorage.getItem("jwt_token")) ||
-          (await AsyncStorage.getItem("authToken"))
-        : (await SecureStore.getItemAsync("jwt_token")) ||
-          (await AsyncStorage.getItem("authToken"));
-    memoryToken = token;
+    if (Platform.OS === "web") {
+      memoryToken =
+        (await AsyncStorage.getItem("jwt_token")) ||
+        (await AsyncStorage.getItem("authToken"));
+    } else {
+      memoryToken =
+        (await SecureStore.getItemAsync("jwt_token")) ||
+        (await AsyncStorage.getItem("authToken"));
+    }
   } catch {
     memoryToken = null;
   }
-  tokenLoaded = true;
+  tokenReady = true;
   return memoryToken;
 }
 
-function looksLikeJwt(s: string): boolean {
-  return s.startsWith("eyJ") || (s.length > 80 && s.split(".").length === 3);
-}
-
 apiClient.interceptors.request.use(async (config) => {
-  const rawUrl = String(config.url ?? "");
-  if (looksLikeJwt(rawUrl)) {
-    console.warn(
-      "[axios] Bỏ request vì URL là JWT, không phải path API:",
-      rawUrl.slice(0, 24) + "...",
-    );
-    return Promise.reject(
-      new Error(
-        "URL API không hợp lệ (đang dùng JWT làm path). Kiểm tra chỗ gọi api.get(...).",
-      ),
-    );
+  if (
+    config.url &&
+    !config.url.startsWith("http") &&
+    !config.url.startsWith("/")
+  ) {
+    config.url = `/${config.url}`;
   }
 
-  if (config.url && !config.url.startsWith("http")) {
-    if (!config.url.startsWith("/")) {
-      config.url = "/" + config.url;
-    }
-  }
-
-  const token = await resolveToken();
+  const token = await loadToken();
   if (token) {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  if (__DEV__) {
-    console.log(
-      "[axios]",
-      (config.method || "get").toUpperCase(),
-      String(config.baseURL || "") + String(config.url || ""),
-    );
   }
 
   return config;
 });
 
 apiClient.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    const status = err?.response?.status;
-    const url = String(err?.config?.url || "");
-    if (status === 404 && url.includes("transcript")) {
-      return Promise.reject(err);
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const method = String(error?.config?.method || "get").toUpperCase();
+    const url = `${error?.config?.baseURL || ""}${error?.config?.url || ""}`;
+
+    if (__DEV__) {
+      console.log(`[API ${status || "ERR"}] ${method} ${url}`);
     }
-    return Promise.reject(err);
+
+    if (status === 404 && method === "GET") {
+      return Promise.resolve({
+        data: error?.response?.data ?? {},
+        status: 404,
+        statusText: "Not Found",
+        headers: error?.response?.headers ?? {},
+        config: error.config,
+        request: error.request,
+      });
+    }
+
+    return Promise.reject(error);
   },
 );
 

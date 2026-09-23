@@ -1,10 +1,12 @@
 import { useAuth } from "@/src/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, useRouter } from "expo-router";
-import React from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
+  Easing,
   StatusBar,
   StyleSheet,
   Text,
@@ -23,30 +25,125 @@ function dashboardByRole(role?: string | null) {
   return null;
 }
 
-/** Splash EduSync — panel thương hiệu xanh */
+/**
+ * Trang chủ (splash) — LUÔN hiện trước.
+ * Không Redirect sang login.
+ * Đã đăng nhập → sau vài giây vào dashboard.
+ * Chưa đăng nhập → nút "Đăng nhập".
+ */
 export default function Index() {
   const { token, user, isLoading } = useAuth();
   const router = useRouter();
+  const [ready, setReady] = useState(false);
 
-  if (isLoading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
-      </View>
+  const fade = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(28)).current;
+  const logoScale = useRef(new Animated.Value(0.7)).current;
+  const orbitSpin = useRef(new Animated.Value(0)).current;
+  const ctaPulse = useRef(new Animated.Value(1)).current;
+  const orbitPulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 700,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slide, {
+        toValue: 0,
+        duration: 700,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.spring(logoScale, {
+        toValue: 1,
+        friction: 6,
+        tension: 80,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const spin = Animated.loop(
+      Animated.timing(orbitSpin, {
+        toValue: 1,
+        duration: 12000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
     );
-  }
+    const pulseOrbit = Animated.loop(
+      Animated.sequence([
+        Animated.timing(orbitPulse, {
+          toValue: 1.06,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(orbitPulse, {
+          toValue: 1,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    const pulseCta = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ctaPulse, {
+          toValue: 1.03,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(ctaPulse, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    spin.start();
+    pulseOrbit.start();
+    pulseCta.start();
 
-  if (token) {
-    const href = dashboardByRole(user?.role) || "/(auth)/login";
-    return <Redirect href={href as any} />;
-  }
+    // Hiện splash tối thiểu ~1.4s rồi mới cho phép auto-vào dashboard
+    const t = setTimeout(() => setReady(true), 1400);
+
+    return () => {
+      spin.stop();
+      pulseOrbit.stop();
+      pulseCta.stop();
+      clearTimeout(t);
+    };
+  }, [fade, slide, logoScale, orbitSpin, ctaPulse, orbitPulse]);
+
+  // Đã login + hết animation → vào dashboard (KHÔNG bao giờ ép sang login)
+  useEffect(() => {
+    if (isLoading || !ready) return;
+    const dash = token ? dashboardByRole(user?.role) : null;
+    if (dash) {
+      router.replace(dash as any);
+    }
+  }, [isLoading, ready, token, user?.role, router]);
+
+  const spinInterpolate = orbitSpin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#1E40AF" />
       <SafeAreaView style={styles.safe}>
-        <View style={styles.brandInner}>
-          <View style={styles.logoRow}>
+        <Animated.View
+          style={[
+            styles.brandInner,
+            {
+              opacity: fade,
+              transform: [{ translateY: slide }],
+            },
+          ]}>
+          <Animated.View
+            style={[styles.logoRow, { transform: [{ scale: logoScale }] }]}>
             <View style={styles.logoMark}>
               <Text style={styles.logoLetter}>S</Text>
             </View>
@@ -54,7 +151,7 @@ export default function Index() {
               <Text style={styles.logoTitle}>EduSync</Text>
               <Text style={styles.logoSub}>TEACHER MANAGER</Text>
             </View>
-          </View>
+          </Animated.View>
 
           <Text style={styles.kicker}>HỆ THỐNG QUẢN LÝ ĐÀO TẠO</Text>
           <Text style={styles.headline}>
@@ -65,7 +162,13 @@ export default function Index() {
             dạy trên một nền tảng duy nhất.
           </Text>
 
-          <View style={styles.orbitWrap}>
+          <Animated.View
+            style={[
+              styles.orbitWrap,
+              {
+                transform: [{ scale: orbitPulse }, { rotate: spinInterpolate }],
+              },
+            ]}>
             <View style={[styles.orbit, styles.orbit3]} />
             <View style={[styles.orbit, styles.orbit2]} />
             <View style={[styles.orbit, styles.orbit1]} />
@@ -75,18 +178,37 @@ export default function Index() {
             <View style={[styles.dot, styles.dot1]} />
             <View style={[styles.dot, styles.dot2]} />
             <View style={[styles.dot, styles.dot3]} />
-          </View>
+          </Animated.View>
 
-          <TouchableOpacity
-            style={styles.cta}
-            activeOpacity={0.85}
-            onPress={() => router.push("/(auth)/login")}>
-            <Text style={styles.ctaText}>Đăng nhập</Text>
-            <Ionicons name="arrow-forward" size={20} color="#1D4ED8" />
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: ctaPulse }] }}>
+            <TouchableOpacity
+              style={styles.cta}
+              activeOpacity={0.85}
+              onPress={() => {
+                const dash = token ? dashboardByRole(user?.role) : null;
+                if (dash) {
+                  router.replace(dash as any);
+                } else {
+                  router.push("/(auth)/login");
+                }
+              }}>
+              {isLoading ? (
+                <ActivityIndicator color="#1D4ED8" />
+              ) : (
+                <>
+                  <Text style={styles.ctaText}>
+                    {token && dashboardByRole(user?.role)
+                      ? "Vào hệ thống"
+                      : "Đăng nhập"}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={20} color="#1D4ED8" />
+                </>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
 
           <Text style={styles.footer}>© 2026 EduSync · Teacher Manager</Text>
-        </View>
+        </Animated.View>
       </SafeAreaView>
     </View>
   );
@@ -94,12 +216,6 @@ export default function Index() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#2563EB" },
-  loading: {
-    flex: 1,
-    backgroundColor: "#2563EB",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   safe: { flex: 1 },
   brandInner: {
     flex: 1,

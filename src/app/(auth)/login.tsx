@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -18,8 +20,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { loginAPI } from "../../api/authApi";
+import { setApiToken } from "../../api/axios";
 
-1
+/**
+ * Login EduSync — form trắng + animation vào màn
+ */
 const LoginScreen = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +32,58 @@ const LoginScreen = () => {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const fade = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(36)).current;
+  const logoScale = useRef(new Animated.Value(0.85)).current;
+  const formSlide = useRef(new Animated.Value(24)).current;
+  const btnScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(fade, {
+          toValue: 1,
+          duration: 550,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
+        Animated.spring(logoScale, {
+          toValue: 1,
+          friction: 7,
+          tension: 70,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slide, {
+          toValue: 0,
+          duration: 550,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
+      ]),
+      Animated.timing(formSlide, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
+  }, [fade, slide, logoScale, formSlide]);
+
+  const pressIn = () => {
+    Animated.spring(btnScale, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      friction: 5,
+    }).start();
+  };
+  const pressOut = () => {
+    Animated.spring(btnScale, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 5,
+    }).start();
+  };
 
   const handleLogin = async () => {
     const user = username.trim();
@@ -45,6 +102,7 @@ const LoginScreen = () => {
       const data = response.data;
 
       if (data.token) {
+        setApiToken(data.token);
         if (Platform.OS === "web") {
           await AsyncStorage.setItem("jwt_token", data.token);
           await AsyncStorage.setItem("role", data.user.role);
@@ -104,98 +162,113 @@ const LoginScreen = () => {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          {/* Brand strip */}
-          <View style={styles.brandStrip}>
-            <View style={styles.logoMark}>
-              <Text style={styles.logoLetter}>S</Text>
-            </View>
-            <View>
-              <Text style={styles.brandName}>EduSync</Text>
-              <Text style={styles.brandTag}>TEACHER MANAGER</Text>
-            </View>
-          </View>
-
-          <Text style={styles.welcome}>CHÀO MỪNG TRỞ LẠI</Text>
-          <Text style={styles.title}>Đăng nhập hệ thống</Text>
-          <Text style={styles.subtitle}>
-            Sử dụng tài khoản được nhà trường cấp để tiếp tục.
-          </Text>
-
-          <Text style={styles.label}>Tên đăng nhập hoặc email</Text>
-          <View style={styles.inputWrap}>
-            <TextInput
-              style={styles.input}
-              value={username}
-              onChangeText={setUsername}
-              placeholder="Nhập tên đăng nhập hoặc email"
-              placeholderTextColor="#9CA3AF"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="default"
-            />
-          </View>
-
-          <Text style={styles.label}>Mật khẩu</Text>
-          <View style={styles.inputWrap}>
-            <TextInput
-              style={[
-                styles.input,
-                { flex: 1, borderWidth: 0, paddingHorizontal: 0 },
-              ]}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Nhập mật khẩu"
-              placeholderTextColor="#9CA3AF"
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity
-              onPress={() => setShowPassword((v) => !v)}
-              hitSlop={10}>
-              <Ionicons
-                name={showPassword ? "eye-outline" : "eye-off-outline"}
-                size={22}
-                color="#6B7280"
-              />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.rowBetween}>
-            <TouchableOpacity
-              style={styles.rememberRow}
-              onPress={() => setRemember((v) => !v)}
-              activeOpacity={0.7}>
-              <View style={[styles.checkbox, remember && styles.checkboxOn]}>
-                {remember && (
-                  <Ionicons name="checkmark" size={14} color="#FFF" />
-                )}
+          <Animated.View
+            style={{
+              opacity: fade,
+              transform: [{ translateY: slide }, { scale: logoScale }],
+            }}>
+            <View style={styles.brandStrip}>
+              <View style={styles.logoMark}>
+                <Text style={styles.logoLetter}>S</Text>
               </View>
-              <Text style={styles.rememberText}>Ghi nhớ đăng nhập</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push("/(auth)/ForgotPassword")}>
-              <Text style={styles.forgot}>Quên mật khẩu?</Text>
-            </TouchableOpacity>
-          </View>
+              <View>
+                <Text style={styles.brandName}>EduSync</Text>
+                <Text style={styles.brandTag}>TEACHER MANAGER</Text>
+              </View>
+            </View>
 
-          <TouchableOpacity
-            style={[styles.loginBtn, loading && { opacity: 0.75 }]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.85}>
-            {loading ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <>
-                <Text style={styles.loginText}>Đăng nhập</Text>
-                <Ionicons name="arrow-forward" size={18} color="#FFF" />
-              </>
-            )}
-          </TouchableOpacity>
+            <Text style={styles.welcome}>CHÀO MỪNG TRỞ LẠI</Text>
+            <Text style={styles.title}>Đăng nhập hệ thống</Text>
+            <Text style={styles.subtitle}>
+              Sử dụng tài khoản được nhà trường cấp để tiếp tục.
+            </Text>
+          </Animated.View>
 
-          <Text style={styles.hint}>
-            Tài khoản do quản trị viên / nhà trường cấp. Không hỗ trợ tự đăng
-            ký.
-          </Text>
+          <Animated.View
+            style={{
+              opacity: fade,
+              transform: [{ translateY: formSlide }],
+            }}>
+            <Text style={styles.label}>Tên đăng nhập hoặc email</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                value={username}
+                onChangeText={setUsername}
+                placeholder="Nhập tên đăng nhập hoặc email"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="default"
+              />
+            </View>
+
+            <Text style={styles.label}>Mật khẩu</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={[
+                  styles.input,
+                  { flex: 1, borderWidth: 0, paddingHorizontal: 0 },
+                ]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Nhập mật khẩu"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword((v) => !v)}
+                hitSlop={10}>
+                <Ionicons
+                  name={showPassword ? "eye-outline" : "eye-off-outline"}
+                  size={22}
+                  color="#6B7280"
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.rowBetween}>
+              <TouchableOpacity
+                style={styles.rememberRow}
+                onPress={() => setRemember((v) => !v)}
+                activeOpacity={0.7}>
+                <View style={[styles.checkbox, remember && styles.checkboxOn]}>
+                  {remember && (
+                    <Ionicons name="checkmark" size={14} color="#FFF" />
+                  )}
+                </View>
+                <Text style={styles.rememberText}>Ghi nhớ đăng nhập</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push("/(auth)/ForgotPassword")}>
+                <Text style={styles.forgot}>Quên mật khẩu?</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+              <TouchableOpacity
+                style={[styles.loginBtn, loading && { opacity: 0.75 }]}
+                onPress={handleLogin}
+                onPressIn={pressIn}
+                onPressOut={pressOut}
+                disabled={loading}
+                activeOpacity={0.9}>
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <>
+                    <Text style={styles.loginText}>Đăng nhập</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                  </>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+
+            <Text style={styles.hint}>
+              Tài khoản do quản trị viên / nhà trường cấp. Không hỗ trợ tự đăng
+              ký.
+            </Text>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
