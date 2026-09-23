@@ -25,12 +25,6 @@ function dashboardByRole(role?: string | null) {
   return null;
 }
 
-/**
- * Trang chủ (splash) — LUÔN hiện trước.
- * Không Redirect sang login.
- * Đã đăng nhập → sau vài giây vào dashboard.
- * Chưa đăng nhập → nút "Đăng nhập".
- */
 export default function Index() {
   const { token, user, isLoading } = useAuth();
   const router = useRouter();
@@ -105,7 +99,6 @@ export default function Index() {
     pulseOrbit.start();
     pulseCta.start();
 
-    // Hiện splash tối thiểu ~1.4s rồi mới cho phép auto-vào dashboard
     const t = setTimeout(() => setReady(true), 1400);
 
     return () => {
@@ -116,7 +109,6 @@ export default function Index() {
     };
   }, [fade, slide, logoScale, orbitSpin, ctaPulse, orbitPulse]);
 
-  // Đã login + hết animation → vào dashboard (KHÔNG bao giờ ép sang login)
   useEffect(() => {
     if (isLoading || !ready) return;
     const dash = token ? dashboardByRole(user?.role) : null;
