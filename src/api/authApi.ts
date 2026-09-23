@@ -26,7 +26,7 @@ export const getScheduleAPI = () => {
 };
 
 export const getTranscriptAPI = () => {
-  return api.get("/transcript");
+  return api.request({ method: "GET", url: "/transcript" });
 };
 
 export const exportTranscriptAPI = () => {

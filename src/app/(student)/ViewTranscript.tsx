@@ -55,7 +55,6 @@ const ViewTranscript: React.FC = () => {
   const [summary, setSummary] = useState<Summary>(
     () => cached?.summary ?? { gpa: 0, totalCredits: 0, totalCourses: 0 },
   );
-  // Có cache → không hiện full-screen loading
   const [loading, setLoading] = useState(() => !cached);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -69,7 +68,6 @@ const ViewTranscript: React.FC = () => {
       if (!token) return;
       const tokenKey = String(token).slice(-24);
 
-      // Cache → mở màn gần như tức thì
       if (
         !force &&
         transcriptCache &&
@@ -85,14 +83,12 @@ const ViewTranscript: React.FC = () => {
       }
 
       try {
-        // Chỉ full-screen loading khi chưa có data
         if (transcript.length === 0 && !refreshing) setLoading(true);
         setMessage(null);
 
         const response = await getTranscriptAPI();
         const body = response?.data ?? {};
 
-        // Lấy mảng điểm đúng chỗ backend trả về
         let rawList: any[] = [];
         if (Array.isArray(body?.transcript)) {
           rawList = body.transcript;
@@ -192,14 +188,25 @@ const ViewTranscript: React.FC = () => {
         };
       } catch (error: any) {
         const status = error?.response?.status;
+        const body = error?.response?.data;
         const msg =
-          error?.response?.data?.message ||
-          error?.message ||
-          "Không thể tải bảng điểm";
-        console.log("transcript error", error?.response?.data || error);
+          body?.message || error?.message || "Không thể tải bảng điểm";
+
         setTranscript([]);
         setSummary({ gpa: 0, totalCredits: 0, totalCourses: 0 });
-        setMessage(status === 404 ? "Chưa có điểm được công bố." : String(msg));
+        if (status === 404) {
+          setMessage(String(body?.message || "Chưa có điểm được công bố."));
+          transcriptCache = {
+            tokenKey,
+            list: [],
+            summary: { gpa: 0, totalCredits: 0, totalCourses: 0 },
+            message: String(body?.message || "Chưa có điểm được công bố."),
+            at: Date.now(),
+          };
+        } else {
+          console.log("transcript error", body || error);
+          setMessage(String(msg));
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -209,7 +216,18 @@ const ViewTranscript: React.FC = () => {
   );
 
   useEffect(() => {
-    if (token) fetchTranscript({ force: false });
+    if (!token) return;
+    let alive = true;
+    (async () => {
+      try {
+        await fetchTranscript({ force: false });
+      } catch (e) {
+        if (alive) console.log("transcript effect", e);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [token, fetchTranscript]);
 
   const onRefresh = () => {
