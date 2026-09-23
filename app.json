@@ -6,13 +6,11 @@
     "orientation": "portrait",
     "scheme": "studentmanagementapp",
     "userInterfaceStyle": "automatic",
-    // "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      // "edgeToEdgeEnabled": true,
-      // "predictiveBackGestureEnabled": false
+      "package": "com.phattt30012004.StudentManagementApp"
     },
     "web": {
       "output": "static"
@@ -35,7 +33,8 @@
       "expo-font",
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

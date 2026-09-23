@@ -1,4 +1,6 @@
+import setApiToken from "@/src/api/axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import React, {
   createContext,
   ReactNode,
@@ -6,6 +8,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { Platform } from "react-native";
 
 interface AuthContextType {
   token: string | null;
@@ -16,6 +19,23 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+async function readJwt(): Promise<string | null> {
+  try {
+    if (Platform.OS === "web") {
+      return (
+        (await AsyncStorage.getItem("jwt_token")) ||
+        (await AsyncStorage.getItem("authToken"))
+      );
+    }
+    return (
+      (await SecureStore.getItemAsync("jwt_token")) ||
+      (await AsyncStorage.getItem("authToken"))
+    );
+  } catch {
+    return null;
+  }
+}
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
@@ -28,11 +48,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const loadStoredAuth = async () => {
     try {
-      const storedToken = await AsyncStorage.getItem("authToken");
+      const storedToken = await readJwt();
       const storedUser = await AsyncStorage.getItem("userData");
-
       if (storedToken) {
         setToken(storedToken);
+        setApiToken(storedToken);
         if (storedUser) setUser(JSON.parse(storedUser));
       }
     } catch (error) {
@@ -44,8 +64,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (newToken: string, userData?: any) => {
     setToken(newToken);
+    setApiToken(newToken);
     if (userData) setUser(userData);
-
     await AsyncStorage.setItem("authToken", newToken);
     if (userData)
       await AsyncStorage.setItem("userData", JSON.stringify(userData));
@@ -54,8 +74,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     setToken(null);
     setUser(null);
+    delete setApiToken.defaults.headers.common.Authorization;
     await AsyncStorage.removeItem("authToken");
     await AsyncStorage.removeItem("userData");
+    try {
+      if (Platform.OS === "web") {
+        await AsyncStorage.removeItem("jwt_token");
+      } else {
+        await SecureStore.deleteItemAsync("jwt_token");
+      }
+    } catch {}
   };
 
   return (

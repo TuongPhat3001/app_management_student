@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
@@ -8,46 +9,39 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { loginAPI } from "../../api/authApi";
 
+1
 const LoginScreen = () => {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const validateEmail = (email: string) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
-  };
-
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Lỗi", "Vui lòng nhập email và mật khẩu");
+    const user = username.trim();
+    if (!user || !password) {
+      Alert.alert("Lỗi", "Vui lòng nhập tên đăng nhập và mật khẩu");
       return;
     }
-
-    if (!validateEmail(email)) {
-      Alert.alert("Lỗi", "Email không hợp lệ");
-      return;
-    }
-
     if (password.length < 6) {
       Alert.alert("Lỗi", "Mật khẩu phải có ít nhất 6 ký tự");
       return;
     }
 
     setLoading(true);
-
     try {
-      const response = await loginAPI({ username: email, password });
+      const response = await loginAPI({ username: user, password });
       const data = response.data;
 
       if (data.token) {
@@ -60,7 +54,7 @@ const LoginScreen = () => {
         }
 
         const navigateToDashboard = () => {
-          const role = data.user.role.toLowerCase();
+          const role = String(data.user?.role || "").toLowerCase();
           if (role === "student") {
             router.replace("/(student)/DashboardStudent");
           } else if (role === "teacher") {
@@ -84,144 +78,244 @@ const LoginScreen = () => {
             ],
           );
         } else {
-          Alert.alert("Thành công", "Đăng nhập thành công!", [
-            { text: "OK", onPress: navigateToDashboard },
-          ]);
+          navigateToDashboard();
         }
       }
     } catch (error: any) {
-      console.log("======================");
-      console.log(error);
-      console.log(error.message);
-      console.log(error.code);
-      console.log(error.response);
-      console.log(error.response?.data);
-      console.log("======================");
-
       Alert.alert(
-        "Lỗi",
-        error.response?.data?.error || error.message || "Đăng nhập thất bại",
+        "Đăng nhập thất bại",
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message ||
+          "Sai tên đăng nhập hoặc mật khẩu",
       );
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.welcomeText}>Xin Chào!!!!</Text>
-          <Text style={styles.subtitle}>Hệ thống quản lý sinh viên</Text>
-        </View>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          {/* Brand strip */}
+          <View style={styles.brandStrip}>
+            <View style={styles.logoMark}>
+              <Text style={styles.logoLetter}>S</Text>
+            </View>
+            <View>
+              <Text style={styles.brandName}>EduSync</Text>
+              <Text style={styles.brandTag}>TEACHER MANAGER</Text>
+            </View>
+          </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Nhập email của bạn"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <Text style={styles.welcome}>CHÀO MỪNG TRỞ LẠI</Text>
+          <Text style={styles.title}>Đăng nhập hệ thống</Text>
+          <Text style={styles.subtitle}>
+            Sử dụng tài khoản được nhà trường cấp để tiếp tục.
+          </Text>
+
+          <Text style={styles.label}>Tên đăng nhập hoặc email</Text>
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.input}
+              value={username}
+              onChangeText={setUsername}
+              placeholder="Nhập tên đăng nhập hoặc email"
+              placeholderTextColor="#9CA3AF"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="default"
+            />
+          </View>
 
           <Text style={styles.label}>Mật khẩu</Text>
-          <View style={styles.passwordContainer}>
+          <View style={styles.inputWrap}>
             <TextInput
-              style={styles.passwordInput}
-              placeholder="Nhập mật khẩu"
+              style={[
+                styles.input,
+                { flex: 1, borderWidth: 0, paddingHorizontal: 0 },
+              ]}
               value={password}
               onChangeText={setPassword}
+              placeholder="Nhập mật khẩu"
+              placeholderTextColor="#9CA3AF"
               secureTextEntry={!showPassword}
             />
             <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-              style={styles.eyeIcon}>
-              <Text>{showPassword ? "🙈" : "👁️"}</Text>
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={10}>
+              <Ionicons
+                name={showPassword ? "eye-outline" : "eye-off-outline"}
+                size={22}
+                color="#6B7280"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.rowBetween}>
+            <TouchableOpacity
+              style={styles.rememberRow}
+              onPress={() => setRemember((v) => !v)}
+              activeOpacity={0.7}>
+              <View style={[styles.checkbox, remember && styles.checkboxOn]}>
+                {remember && (
+                  <Ionicons name="checkmark" size={14} color="#FFF" />
+                )}
+              </View>
+              <Text style={styles.rememberText}>Ghi nhớ đăng nhập</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/ForgotPassword")}>
+              <Text style={styles.forgot}>Quên mật khẩu?</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity
-            style={styles.forgotPassword}
-            onPress={() => router.push("/(auth)/ForgotPassword")}>
-            <Text style={styles.forgotText}>Quên mật khẩu?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.loginButton}
+            style={[styles.loginBtn, loading && { opacity: 0.75 }]}
             onPress={handleLogin}
-            disabled={loading}>
+            disabled={loading}
+            activeOpacity={0.85}>
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#FFF" />
             ) : (
-              <Text style={styles.loginButtonText}>Đăng nhập</Text>
+              <>
+                <Text style={styles.loginText}>Đăng nhập</Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFF" />
+              </>
             )}
           </TouchableOpacity>
 
-          {/* <TouchableOpacity style={styles.registerLink}>
-            <Text style={styles.registerText}>
-              Chưa có tài khoản?{" "}
-              <Text style={styles.registerHighlight}>Đăng ký</Text>
-            </Text>
-          </TouchableOpacity> */}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <Text style={styles.hint}>
+            Tài khoản do quản trị viên / nhà trường cấp. Không hỗ trợ tự đăng
+            ký.
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
+export default LoginScreen;
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8F9FA" },
-  scrollContent: { flexGrow: 1, padding: 24, justifyContent: "center" },
-  header: { alignItems: "center", marginBottom: 40 },
-  welcomeText: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#1F2937",
+  safe: { flex: 1, backgroundColor: "#FFFFFF" },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: 28,
+    paddingTop: 20,
+    paddingBottom: 40,
+    justifyContent: "center",
+  },
+  brandStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 32,
+  },
+  logoMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#2563EB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logoLetter: { fontSize: 20, fontWeight: "800", color: "#FFFFFF" },
+  brandName: { fontSize: 18, fontWeight: "800", color: "#111827" },
+  brandTag: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#6B7280",
+    letterSpacing: 1.1,
+    marginTop: 2,
+  },
+  welcome: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#2563EB",
+    letterSpacing: 1.2,
     marginBottom: 8,
   },
-  subtitle: { fontSize: 16, color: "#6B7280", textAlign: "center" },
-  form: { width: "100%" },
-  label: {
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  subtitle: {
     fontSize: 14,
+    color: "#6B7280",
+    lineHeight: 20,
+    marginBottom: 28,
+  },
+  label: {
+    fontSize: 13,
     fontWeight: "600",
     color: "#374151",
     marginBottom: 8,
-    marginTop: 16,
+  },
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    backgroundColor: "#FFFFFF",
+    minHeight: 52,
   },
   input: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
+    flex: 1,
+    fontSize: 15,
+    color: "#111827",
+    paddingVertical: 12,
   },
-  passwordContainer: {
+  rowBetween: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
     alignItems: "center",
-  },
-  passwordInput: { flex: 1, padding: 16, fontSize: 16 },
-  eyeIcon: { padding: 16 },
-  forgotPassword: { alignSelf: "flex-end", marginTop: 8, marginBottom: 24 },
-  forgotText: { color: "#3B82F6", fontWeight: "600" },
-  loginButton: {
-    backgroundColor: "#2563EB",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 24,
+    marginTop: 4,
   },
-  loginButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  registerLink: { alignItems: "center" },
-  registerText: { color: "#6B7280", fontSize: 14 },
-  registerHighlight: { color: "#2563EB", fontWeight: "600" },
+  rememberRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: "#D1D5DB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxOn: {
+    backgroundColor: "#2563EB",
+    borderColor: "#2563EB",
+  },
+  rememberText: { fontSize: 13, color: "#4B5563" },
+  forgot: { fontSize: 13, fontWeight: "600", color: "#2563EB" },
+  loginBtn: {
+    backgroundColor: "#2563EB",
+    borderRadius: 14,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  loginText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  hint: {
+    marginTop: 28,
+    textAlign: "center",
+    fontSize: 12,
+    color: "#9CA3AF",
+    lineHeight: 18,
+  },
 });
-
-export default LoginScreen;
