@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { ColorValue, Platform, StyleSheet, View } from "react-native";
 
 export default function TeacherLayout() {
   return (
@@ -84,8 +84,8 @@ export default function TeacherLayout() {
         }}
       />
 
-      {/* Thông báo: không hiện trên tab bar — mở bằng nút chuông */}
       <Tabs.Screen name="Notification" options={{ href: null }} />
+      <Tabs.Screen name="ViewTeachingSchedule" options={{ href: null }} />
       <Tabs.Screen name="class-offers" options={{ href: null }} />
       <Tabs.Screen name="page" options={{ href: null }} />
     </Tabs>
@@ -98,7 +98,7 @@ function TabIcon({
   focused,
 }: {
   name: React.ComponentProps<typeof Ionicons>["name"];
-  color: string;
+  color: ColorValue;
   focused: boolean;
 }) {
   return (

@@ -30,14 +30,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as SecureStore from "expo-secure-store";
-import { LogBox, Platform } from "react-native";
-
-LogBox.ignoreLogs([
-  "AxiosError",
-  "status code 404",
-  "Request failed with status code 404",
-  "Uncaught (in promise",
-]);
+import { Platform } from "react-native";
 
 const API_BASE = "http://192.168.20.16:8080";
 
@@ -50,34 +43,33 @@ const apiClient = axios.create({
 });
 
 let memoryToken: string | null = null;
-let tokenReady = false;
 
 export function setApiToken(token: string | null) {
   memoryToken = token;
-  tokenReady = true;
 }
 
 export function getApiToken() {
   return memoryToken;
 }
 
-async function loadToken(): Promise<string | null> {
-  if (tokenReady) return memoryToken;
+async function resolveToken(): Promise<string | null> {
+  if (memoryToken) return memoryToken;
+
   try {
-    if (Platform.OS === "web") {
-      memoryToken =
-        (await AsyncStorage.getItem("jwt_token")) ||
-        (await AsyncStorage.getItem("authToken"));
-    } else {
-      memoryToken =
-        (await SecureStore.getItemAsync("jwt_token")) ||
-        (await AsyncStorage.getItem("authToken"));
+    const token =
+      Platform.OS === "web"
+        ? (await AsyncStorage.getItem("jwt_token")) ||
+          (await AsyncStorage.getItem("authToken"))
+        : (await SecureStore.getItemAsync("jwt_token")) ||
+          (await AsyncStorage.getItem("authToken"));
+
+    if (token) {
+      memoryToken = token;
     }
+    return token;
   } catch {
-    memoryToken = null;
+    return null;
   }
-  tokenReady = true;
-  return memoryToken;
 }
 
 apiClient.interceptors.request.use(async (config) => {
@@ -89,10 +81,19 @@ apiClient.interceptors.request.use(async (config) => {
     config.url = `/${config.url}`;
   }
 
-  const token = await loadToken();
+  const token = await resolveToken();
   if (token) {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  if (__DEV__) {
+    console.log(
+      "[axios]",
+      (config.method || "get").toUpperCase(),
+      `${config.baseURL || ""}${config.url || ""}`,
+      token ? "(auth)" : "(no token)",
+    );
   }
 
   return config;
@@ -101,25 +102,11 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    const status = error?.response?.status;
-    const method = String(error?.config?.method || "get").toUpperCase();
-    const url = `${error?.config?.baseURL || ""}${error?.config?.url || ""}`;
-
     if (__DEV__) {
-      console.log(`[API ${status || "ERR"}] ${method} ${url}`);
+      const status = error?.response?.status;
+      const url = `${error?.config?.baseURL || ""}${error?.config?.url || ""}`;
+      console.log(`[axios] ERR ${status || "?"} ${url}`);
     }
-
-    if (status === 404 && method === "GET") {
-      return Promise.resolve({
-        data: error?.response?.data ?? {},
-        status: 404,
-        statusText: "Not Found",
-        headers: error?.response?.headers ?? {},
-        config: error.config,
-        request: error.request,
-      });
-    }
-
     return Promise.reject(error);
   },
 );

@@ -1,26 +1,31 @@
-import axios from "axios";
-import React, { useEffect, useState } from "react";
+import api from "@/src/api/axios";
+import { useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Modal,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+type ClassItem = { id: number; classCode: string };
 
 type ExerciseItem = {
   id: number;
-  title?: string;
+  title: string;
   description?: string;
   dueDate?: string;
-  status?: string;
   classId?: number;
-  class?: { classCode?: string };
+  classCode?: string;
+  status?: string;
 };
 
 type SubmissionItem = {
@@ -31,19 +36,21 @@ type SubmissionItem = {
   status?: string;
   score?: number | null;
   feedback?: string;
-  student?: {
-    studentCode?: string;
-    user?: { fullName?: string };
-  };
+  studentName?: string;
+  studentCode?: string;
 };
 
-type ClassItem = {
-  id?: number;
-  classId?: number;
-  classCode?: string;
-};
-
+/**
+ * Backend:
+ * GET  /exercises
+ * POST /exercises { classId, title, description, dueDate }  dueDate required
+ * GET  /exercises/:id/submissions
+ * GET  /teacher/classes
+ */
 const ManageAssignments = () => {
+  const params = useLocalSearchParams<{ focus?: string }>();
+  const focusPending = params.focus === "pending";
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exercises, setExercises] = useState<ExerciseItem[]>([]);
@@ -61,60 +68,111 @@ const ManageAssignments = () => {
   );
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [loadingSubs, setLoadingSubs] = useState(false);
+  const [onlyPending, setOnlyPending] = useState(focusPending);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const mapClass = (c: any): ClassItem | null => {
+    const id = Number(c.ID ?? c.id);
+    if (!id) return null;
+    return {
+      id,
+      classCode: String(c.ClassCode ?? c.classCode ?? `Lớp #${id}`),
+    };
+  };
 
-  const loadData = async () => {
+  const mapExercise = (e: any): ExerciseItem => {
+    const cls = e.Class ?? e.class ?? {};
+    return {
+      id: Number(e.ID ?? e.id),
+      title: String(e.Title ?? e.title ?? "Bài tập"),
+      description: e.Description ?? e.description,
+      dueDate: e.DueDate ?? e.dueDate,
+      classId: Number(e.ClassID ?? e.classId ?? cls.ID ?? cls.id) || undefined,
+      classCode: String(cls.ClassCode ?? cls.classCode ?? e.classCode ?? ""),
+      status: e.Status ?? e.status,
+    };
+  };
+
+  const loadData = useCallback(async () => {
     try {
       const [exRes, classRes] = await Promise.all([
-        axios.get("/exercises"),
-        axios.get("/teacher/classes"),
+        api.get("/exercises"),
+        api.get("/teacher/classes"),
       ]);
-      setExercises(exRes.data?.data || exRes.data || []);
-      setClasses(classRes.data?.data || classRes.data || []);
-    } catch {
+      const rawEx = exRes.data?.data ?? exRes.data ?? [];
+      const rawCl = classRes.data?.data ?? classRes.data ?? [];
+      setExercises(
+        (Array.isArray(rawEx) ? rawEx : [])
+          .map(mapExercise)
+          .filter((x) => x.id),
+      );
+      setClasses(
+        (Array.isArray(rawCl) ? rawCl : [])
+          .map(mapClass)
+          .filter(Boolean) as ClassItem[],
+      );
+    } catch (e) {
+      console.log("exercises load", e);
       setExercises([]);
       setClasses([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    setOnlyPending(focusPending);
+  }, [focusPending]);
 
   const openCreate = () => {
     setTitle("");
     setDescription("");
-    setDueDate("");
-    setClassId(classes[0] ? classes[0].classId || classes[0].id || null : null);
+    const today = new Date();
+    today.setDate(today.getDate() + 7);
+    setDueDate(today.toISOString().slice(0, 10));
+    setClassId(classes[0]?.id ?? null);
     setShowCreate(true);
   };
 
   const createExercise = async () => {
     if (!title.trim()) {
-      Alert.alert("Thông báo", "Vui lòng nhập tiêu đề bài tập");
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập tiêu đề bài tập");
       return;
     }
     if (!classId) {
-      Alert.alert("Thông báo", "Vui lòng chọn lớp");
+      Alert.alert(
+        "Thiếu thông tin",
+        classes.length === 0
+          ? "Bạn chưa có lớp phụ trách. Nhận lớp từ admin trước."
+          : "Vui lòng chọn lớp",
+      );
+      return;
+    }
+    if (!dueDate.trim()) {
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập hạn nộp (YYYY-MM-DD)");
       return;
     }
     setSaving(true);
     try {
-      await axios.post("/exercises", {
+      await api.post("/exercises", {
+        classId,
         title: title.trim(),
         description: description.trim(),
-        classId,
-        dueDate: dueDate || undefined,
+        dueDate: dueDate.trim(),
       });
       Alert.alert("Thành công", "Đã tạo bài tập");
       setShowCreate(false);
       loadData();
     } catch (err: any) {
+      const d = err?.response?.data;
       Alert.alert(
         "Lỗi",
-        err.response?.data?.message || "Không tạo được bài tập",
+        [d?.message, d?.error].filter(Boolean).join("\n") ||
+          "Không tạo được bài tập",
       );
     } finally {
       setSaving(false);
@@ -125,8 +183,24 @@ const ManageAssignments = () => {
     setSelectedExercise(item);
     setLoadingSubs(true);
     try {
-      const res = await axios.get(`/exercises/${item.id}/submissions`);
-      setSubmissions(res.data?.data || res.data || []);
+      const res = await api.get(`/exercises/${item.id}/submissions`);
+      const raw = res.data?.data ?? res.data ?? [];
+      const list = (Array.isArray(raw) ? raw : []).map((s: any) => {
+        const student = s.Student ?? s.student ?? {};
+        const user = student.User ?? student.user ?? {};
+        return {
+          id: Number(s.ID ?? s.id),
+          content: s.Content ?? s.content,
+          fileURL: s.FileURL ?? s.fileURL ?? s.fileUrl,
+          submittedAt: s.SubmittedAt ?? s.submittedAt,
+          status: String(s.Status ?? s.status ?? "submitted"),
+          score: s.Score ?? s.score,
+          feedback: s.Feedback ?? s.feedback,
+          studentName: String(user.FullName ?? user.fullName ?? "Sinh viên"),
+          studentCode: String(student.StudentCode ?? student.studentCode ?? ""),
+        } as SubmissionItem;
+      });
+      setSubmissions(list);
     } catch {
       setSubmissions([]);
       Alert.alert("Lỗi", "Không tải được bài nộp");
@@ -144,6 +218,11 @@ const ManageAssignments = () => {
     }
   };
 
+  const pendingCount = useMemo(() => {
+    // Hiển thị theo submission status khi đã mở — trên list exercise không có count
+    return 0;
+  }, []);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -152,61 +231,98 @@ const ManageAssignments = () => {
     );
   }
 
-  // Màn hình xem bài nộp
   if (selectedExercise) {
+    const pendingSubs = onlyPending
+      ? submissions.filter(
+          (s) =>
+            !s.status ||
+            s.status.toLowerCase() === "submitted" ||
+            s.status.toLowerCase() === "pending" ||
+            s.score == null,
+        )
+      : submissions;
+
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
         <TouchableOpacity onPress={() => setSelectedExercise(null)}>
-          <Text style={styles.back}>‹ Quay lại</Text>
+          <Text style={styles.back}>‹ Quay lại danh sách bài tập</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{selectedExercise.title}</Text>
         <Text style={styles.meta}>
-          Hạn nộp: {formatDate(selectedExercise.dueDate)}
+          Lớp: {selectedExercise.classCode || selectedExercise.classId || "—"} ·
+          Hạn: {formatDate(selectedExercise.dueDate)}
         </Text>
+
+        <View style={styles.filterRow}>
+          <TouchableOpacity
+            style={[styles.filterChip, !onlyPending && styles.filterOn]}
+            onPress={() => setOnlyPending(false)}>
+            <Text
+              style={[styles.filterText, !onlyPending && styles.filterTextOn]}>
+              Tất cả
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, onlyPending && styles.filterOn]}
+            onPress={() => setOnlyPending(true)}>
+            <Text
+              style={[styles.filterText, onlyPending && styles.filterTextOn]}>
+              Chờ chấm
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {loadingSubs ? (
           <ActivityIndicator style={{ marginTop: 40 }} color="#2563eb" />
         ) : (
           <FlatList
-            data={submissions}
+            data={pendingSubs}
             keyExtractor={(item) => String(item.id)}
             ListEmptyComponent={
-              <Text style={styles.empty}>Chưa có bài nộp</Text>
+              <Text style={styles.empty}>
+                {onlyPending ? "Không có bài nộp chờ chấm" : "Chưa có bài nộp"}
+              </Text>
             }
             renderItem={({ item }) => (
               <View style={styles.card}>
-                <Text style={styles.studentName}>
-                  {item.student?.user?.fullName || "Sinh viên"}
-                </Text>
+                <Text style={styles.studentName}>{item.studentName}</Text>
                 <Text style={styles.meta}>
-                  {item.student?.studentCode || ""} ·{" "}
-                  {formatDate(item.submittedAt)}
+                  {item.studentCode} · {formatDate(item.submittedAt)}
                 </Text>
                 {!!item.content && (
-                  <Text style={styles.content} numberOfLines={4}>
+                  <Text style={styles.content} numberOfLines={5}>
                     {item.content}
                   </Text>
                 )}
                 <Text style={styles.status}>
-                  {item.status || "submitted"}
-                  {item.score != null ? ` · Điểm: ${item.score}` : ""}
+                  {item.status}
+                  {item.score != null
+                    ? ` · Điểm: ${item.score}`
+                    : " · Chưa chấm"}
                 </Text>
               </View>
             )}
           />
         )}
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Bài tập</Text>
         <TouchableOpacity style={styles.addBtn} onPress={openCreate}>
           <Text style={styles.addBtnText}>+ Tạo mới</Text>
         </TouchableOpacity>
       </View>
+
+      {classes.length === 0 && (
+        <Text style={styles.warn}>
+          Chưa có lớp phụ trách — nhận lớp từ admin (Đề xuất lớp) trước khi tạo
+          bài tập.
+        </Text>
+      )}
 
       <FlatList
         data={exercises}
@@ -229,7 +345,7 @@ const ManageAssignments = () => {
             onPress={() => openSubmissions(item)}>
             <Text style={styles.exTitle}>{item.title}</Text>
             <Text style={styles.meta}>
-              Lớp: {item.class?.classCode || item.classId || "—"}
+              Lớp: {item.classCode || item.classId || "—"}
             </Text>
             <Text style={styles.meta}>Hạn: {formatDate(item.dueDate)}</Text>
             <Text style={styles.link}>Xem bài nộp ›</Text>
@@ -237,85 +353,96 @@ const ManageAssignments = () => {
         )}
       />
 
-      {/* Modal tạo bài tập */}
       <Modal visible={showCreate} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Tạo bài tập mới</Text>
+          <ScrollView
+            contentContainerStyle={styles.modalScroll}
+            keyboardShouldPersistTaps="handled">
+            <View style={styles.modalBox}>
+              <Text style={styles.modalTitle}>Tạo bài tập mới</Text>
 
-            <Text style={styles.label}>Tiêu đề</Text>
-            <TextInput
-              style={styles.input}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Nhập tiêu đề"
-            />
+              <Text style={styles.label}>Tiêu đề *</Text>
+              <TextInput
+                style={styles.input}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="Nhập tiêu đề"
+                placeholderTextColor="#94A3B8"
+              />
 
-            <Text style={styles.label}>Mô tả</Text>
-            <TextInput
-              style={[styles.input, { height: 80 }]}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Mô tả bài tập"
-              multiline
-            />
+              <Text style={styles.label}>Mô tả</Text>
+              <TextInput
+                style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Mô tả bài tập"
+                placeholderTextColor="#94A3B8"
+                multiline
+              />
 
-            <Text style={styles.label}>Lớp</Text>
-            <View style={styles.classPick}>
-              {classes.map((c) => {
-                const id = c.classId || c.id || 0;
-                const active = classId === id;
-                return (
-                  <TouchableOpacity
-                    key={id}
-                    style={[styles.chip, active && styles.chipActive]}
-                    onPress={() => setClassId(id)}>
-                    <Text
-                      style={[
-                        styles.chipText,
-                        active && styles.chipTextActive,
-                      ]}>
-                      {c.classCode || `#${id}`}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.label}>Hạn nộp (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={dueDate}
-              onChangeText={setDueDate}
-              placeholder="2026-07-30"
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.btnCancel}
-                onPress={() => setShowCreate(false)}>
-                <Text style={styles.btnCancelText}>Hủy</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.btnSave}
-                onPress={createExercise}
-                disabled={saving}>
-                <Text style={styles.btnSaveText}>
-                  {saving ? "Đang tạo..." : "Tạo bài tập"}
+              <Text style={styles.label}>Lớp *</Text>
+              {classes.length === 0 ? (
+                <Text style={styles.warnInline}>
+                  Không có lớp để chọn. Vào Đề xuất lớp để nhận phân công.
                 </Text>
-              </TouchableOpacity>
+              ) : (
+                <View style={styles.classPick}>
+                  {classes.map((c) => {
+                    const active = classId === c.id;
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => setClassId(c.id)}>
+                        <Text
+                          style={[
+                            styles.chipText,
+                            active && styles.chipTextActive,
+                          ]}>
+                          {c.classCode}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              <Text style={styles.label}>Hạn nộp (YYYY-MM-DD) *</Text>
+              <TextInput
+                style={styles.input}
+                value={dueDate}
+                onChangeText={setDueDate}
+                placeholder="2026-12-31"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.btnCancel}
+                  onPress={() => setShowCreate(false)}>
+                  <Text style={styles.btnCancelText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.btnSave}
+                  onPress={createExercise}
+                  disabled={saving}>
+                  <Text style={styles.btnSaveText}>
+                    {saving ? "Đang tạo..." : "Tạo bài tập"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
 export default ManageAssignments;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc", padding: 16 },
+  container: { flex: 1, backgroundColor: "#f8fafc", paddingHorizontal: 16 },
   center: {
     flex: 1,
     justifyContent: "center",
@@ -327,6 +454,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 14,
+    marginTop: 8,
   },
   title: { fontSize: 22, fontWeight: "800", color: "#0f172a" },
   addBtn: {
@@ -351,10 +479,42 @@ const styles = StyleSheet.create({
   status: { fontSize: 12, color: "#94a3b8", marginTop: 6 },
   link: { marginTop: 8, color: "#2563eb", fontWeight: "600" },
   empty: { textAlign: "center", color: "#94a3b8", marginTop: 40 },
-  back: { color: "#2563eb", fontWeight: "700", marginBottom: 10, fontSize: 15 },
+  back: {
+    color: "#2563eb",
+    fontWeight: "700",
+    marginBottom: 10,
+    marginTop: 8,
+    fontSize: 15,
+  },
+  warn: {
+    backgroundColor: "#fff7ed",
+    color: "#c2410c",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  warnInline: { color: "#dc2626", fontSize: 13, marginBottom: 8 },
+  filterRow: { flexDirection: "row", gap: 8, marginVertical: 10 },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: "#fff",
+  },
+  filterOn: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  filterText: { fontSize: 13, fontWeight: "600", color: "#64748b" },
+  filterTextOn: { color: "#fff" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+  },
+  modalScroll: {
+    flexGrow: 1,
     justifyContent: "center",
     padding: 20,
   },
@@ -385,7 +545,7 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     backgroundColor: "#f8fafc",
   },
   chipActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },

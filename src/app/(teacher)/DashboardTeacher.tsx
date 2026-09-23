@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -31,33 +31,29 @@ const DashboardTeacher = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       const res = await getTeacherDashboardAPI();
-
-      setData(res.data?.data ?? {});
+      const d = res.data?.data ?? res.data ?? {};
+      setData({
+        classes: Number(d.classes ?? d.Classes ?? 0) || 0,
+        pendingClassOffers:
+          Number(d.pendingClassOffers ?? d.PendingClassOffers ?? 0) || 0,
+        exercises: Number(d.exercises ?? d.Exercises ?? 0) || 0,
+        pendingSubmissions:
+          Number(d.pendingSubmissions ?? d.PendingSubmissions ?? 0) || 0,
+      });
     } catch (error) {
       console.log("Teacher dashboard error:", error);
-      setData({
-        classes: 0,
-        pendingClassOffers: 0,
-        exercises: 0,
-        pendingSubmissions: 0,
-      });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchDashboard();
-  }, []);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchDashboard();
-  };
+  }, [fetchDashboard]);
 
   if (loading) {
     return (
@@ -73,28 +69,38 @@ const DashboardTeacher = () => {
       value: data.classes,
       color: "#2563eb",
       bg: "#eff6ff",
+      route: "/(teacher)/Grades",
     },
     {
       label: "Lớp chờ phản hồi",
       value: data.pendingClassOffers,
       color: "#7c3aed",
       bg: "#f5f3ff",
+      route: "/(teacher)/class-offers",
     },
     {
       label: "Bài tập",
       value: data.exercises,
       color: "#d97706",
       bg: "#fffbeb",
+      route: "/(teacher)/ManageAssignments",
     },
     {
       label: "Bài nộp chờ chấm",
       value: data.pendingSubmissions,
       color: "#dc2626",
       bg: "#fef2f2",
+      route: "/(teacher)/ManageAssignments?focus=pending",
     },
   ];
 
   const quickActions = [
+    {
+      title: "Lịch dạy",
+      desc: "Xem thời khóa biểu giảng dạy",
+      route: "/(teacher)/ViewTeachingSchedule",
+      color: "#0ea5e9",
+    },
     {
       title: "Điểm danh",
       desc: "Tạo QR / xem & sửa điểm danh",
@@ -126,7 +132,13 @@ const DashboardTeacher = () => {
       style={styles.container}
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            fetchDashboard();
+          }}
+        />
       }>
       <View style={styles.header}>
         <View>
@@ -145,14 +157,17 @@ const DashboardTeacher = () => {
 
       <View style={styles.statsGrid}>
         {cards.map((item, idx) => (
-          <View
+          <TouchableOpacity
             key={idx}
-            style={[styles.statCard, { backgroundColor: item.bg }]}>
+            style={[styles.statCard, { backgroundColor: item.bg }]}
+            activeOpacity={0.75}
+            onPress={() => router.push(item.route as any)}>
             <Text style={[styles.statValue, { color: item.color }]}>
               {item.value}
             </Text>
             <Text style={styles.statLabel}>{item.label}</Text>
-          </View>
+            <Text style={[styles.statHint, { color: item.color }]}>Xem ›</Text>
+          </TouchableOpacity>
         ))}
       </View>
 
@@ -203,33 +218,31 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 16,
+    gap: 12,
+    marginBottom: 24,
   },
   statCard: {
-    width: "48%",
-    borderRadius: 14,
+    width: "47%",
+    borderRadius: 16,
     padding: 16,
+    minHeight: 100,
   },
-  statValue: { fontSize: 24, fontWeight: "800" },
-  statLabel: { fontSize: 13, color: "#64748b", marginTop: 4 },
+  statValue: { fontSize: 28, fontWeight: "800" },
+  statLabel: { fontSize: 13, color: "#64748b", marginTop: 6 },
+  statHint: { fontSize: 12, fontWeight: "700", marginTop: 8 },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "700",
     color: "#0f172a",
-    marginTop: 8,
     marginBottom: 12,
   },
   actionCard: {
@@ -242,14 +255,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
-  actionDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 12,
-  },
+  actionDot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
   actionContent: { flex: 1 },
-  actionTitle: { fontSize: 15, fontWeight: "700", color: "#1e293b" },
+  actionTitle: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
   actionDesc: { fontSize: 12, color: "#94a3b8", marginTop: 2 },
   actionArrow: { fontSize: 22, color: "#cbd5e1", fontWeight: "300" },
 });

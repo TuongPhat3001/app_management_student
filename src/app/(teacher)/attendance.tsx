@@ -1,5 +1,5 @@
-import axios from "axios";
-import React, { useEffect, useState } from "react";
+import api from "@/src/api/axios";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,95 +11,162 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-type ClassItem = {
-  id?: number;
-  classId?: number;
-  classCode?: string;
-  courseName?: string;
-};
-
-type SessionItem = {
-  id: number;
-  code?: string;
-  classDate?: string;
-  expiresAt?: string;
-  isActive?: boolean;
-  note?: string;
+type OfferingItem = {
+  key: string;
+  classId: number;
+  courseId: number;
+  courseOfferingId: number;
+  classCode: string;
+  courseName: string;
+  courseCode: string;
 };
 
 type RecordItem = {
   id: number;
   status?: string;
-  note?: string;
-  classDate?: string;
-  checkedInAt?: string;
-  studentCode?: string;
   studentName?: string;
-  enrollment?: {
-    student?: {
-      studentCode?: string;
-      user?: { fullName?: string };
-    };
-  };
+  studentCode?: string;
 };
 
-const STATUS_OPTIONS = ["present", "absent", "late", "excused"];
+const STATUS_OPTIONS = ["present", "absent", "late", "excused"] as const;
 
+/**
+ * Backend:
+ * GET  /teacher/classes  (hoặc /teacher/attendance/classes)
+ * POST /attendance/sessions { classId, courseId } | { courseOfferingId }
+ * GET  /attendance/sessions/:id/records
+ * PUT  /attendances/:id { status }
+ *
+ * Lưu ý: chỉ tạo QR được nếu hôm nay có lịch dạy học phần đó.
+ */
 const Attendance = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
-
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [records, setRecords] = useState<RecordItem[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
-    null,
-  );
-  const [showRecords, setShowRecords] = useState(false);
+  const [items, setItems] = useState<OfferingItem[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    loadClasses();
-  }, []);
+  const [showRecords, setShowRecords] = useState(false);
+  const [records, setRecords] = useState<RecordItem[]>([]);
+  const [sessionInfo, setSessionInfo] = useState<{
+    id: number;
+    code?: string;
+    expiresAt?: string;
+  } | null>(null);
 
-  const loadClasses = async () => {
+  const mapOfferings = (classes: any[]): OfferingItem[] => {
+    const out: OfferingItem[] = [];
+    for (const c of classes || []) {
+      const classId = Number(c.ID ?? c.id);
+      const classCode = String(c.ClassCode ?? c.classCode ?? `Lớp #${classId}`);
+      const offerings = c.CourseOfferings ?? c.courseOfferings ?? [];
+
+      if (Array.isArray(offerings) && offerings.length > 0) {
+        for (const o of offerings) {
+          const offeringId = Number(o.ID ?? o.id);
+          const course = o.Course ?? o.course ?? {};
+          const courseId = Number(
+            o.CourseID ?? o.courseId ?? course.ID ?? course.id ?? 0,
+          );
+          if (!classId || !offeringId) continue;
+          out.push({
+            key: `off-${offeringId}`,
+            classId,
+            courseId: courseId || 0,
+            courseOfferingId: offeringId,
+            classCode,
+            courseName: String(
+              course.Name ?? course.name ?? o.courseName ?? "Học phần",
+            ),
+            courseCode: String(course.Code ?? course.code ?? ""),
+          });
+        }
+      } else if (classId) {
+        // Fallback: lớp không preload offering
+        out.push({
+          key: `cls-${classId}`,
+          classId,
+          courseId: 0,
+          courseOfferingId: 0,
+          classCode,
+          courseName: "Học phần (chưa gắn)",
+          courseCode: "",
+        });
+      }
+    }
+    return out;
+  };
+
+  const loadClasses = useCallback(async () => {
     try {
-      const res = await axios.get("/teacher/attendance/classes");
-      setClasses(res.data?.data || res.data || []);
-    } catch {
-      setClasses([]);
+      // Ưu tiên /teacher/classes (có CourseOfferings)
+      let raw: any[] = [];
+      try {
+        const res = await api.get("/teacher/classes");
+        raw = res.data?.data ?? res.data ?? [];
+      } catch {
+        const res2 = await api.get("/teacher/attendance/classes");
+        raw = res2.data?.data ?? res2.data ?? [];
+      }
+      const list = mapOfferings(Array.isArray(raw) ? raw : []);
+      setItems(list);
+      if (list.length && !selectedKey) {
+        setSelectedKey(list[0].key);
+      }
+    } catch (e) {
+      console.log("attendance classes", e);
+      setItems([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [selectedKey]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
+  useEffect(() => {
     loadClasses();
-  };
+  }, [loadClasses]);
 
-  const getClassId = (item: ClassItem) => item.classId || item.id || 0;
-
-  const createSession = async (classId: number) => {
+  const createSession = async (item: OfferingItem) => {
+    if (!item.classId) {
+      Alert.alert("Lỗi", "Không xác định được lớp");
+      return;
+    }
     setCreating(true);
+    setSelectedKey(item.key);
     try {
-      const res = await axios.post("/attendance/sessions", { classId });
-      const session = res.data?.data || res.data;
+      const body: Record<string, number | string> = {};
+      if (item.courseOfferingId > 0) {
+        body.courseOfferingId = item.courseOfferingId;
+      } else if (item.courseId > 0) {
+        body.classId = item.classId;
+        body.courseId = item.courseId;
+      } else {
+        body.classId = item.classId;
+      }
+
+      const res = await api.post("/attendance/sessions", body);
+      const session = res.data?.data ?? res.data ?? {};
+      const id = Number(session.ID ?? session.id);
+      const code = session.Code ?? session.code;
+      const expiresAt = session.ExpiresAt ?? session.expiresAt;
+
       Alert.alert(
-        "Tạo phiên điểm danh thành công",
-        `Mã: ${session.code || "—"}\nHiệu lực đến: ${formatTime(session.expiresAt)}`,
+        "Tạo QR thành công",
+        `Mã: ${code || "—"}\nHết hạn: ${formatTime(expiresAt)}\n\nSinh viên quét mã này để điểm danh.`,
       );
-      // Mở luôn danh sách điểm danh của phiên mới
-      if (session.id) {
-        openRecords(session.id);
+
+      if (id) {
+        setSessionInfo({ id, code, expiresAt });
+        await openRecords(id);
       }
     } catch (err: any) {
+      const d = err?.response?.data;
       Alert.alert(
-        "Lỗi",
-        err.response?.data?.message || "Không tạo được phiên điểm danh",
+        "Không tạo được phiên",
+        [d?.message, d?.error].filter(Boolean).join("\n") ||
+          "Kiểm tra: hôm nay có lịch dạy học phần này không?",
       );
     } finally {
       setCreating(false);
@@ -107,27 +174,47 @@ const Attendance = () => {
   };
 
   const openRecords = async (sessionId: number) => {
-    setSelectedSessionId(sessionId);
     setShowRecords(true);
     try {
-      const res = await axios.get(`/attendance/sessions/${sessionId}/records`);
-      setRecords(res.data?.data || res.data || []);
+      const res = await api.get(`/attendance/sessions/${sessionId}/records`);
+      const raw = res.data?.data ?? res.data ?? [];
+      setRecords(
+        (Array.isArray(raw) ? raw : []).map((r: any) => {
+          const enrollment = r.Enrollment ?? r.enrollment ?? {};
+          const student =
+            enrollment.Student ??
+            enrollment.student ??
+            r.Student ??
+            r.student ??
+            {};
+          const user = student.User ?? student.user ?? {};
+          return {
+            id: Number(r.ID ?? r.id),
+            status: r.Status ?? r.status,
+            studentName: String(
+              user.FullName ?? user.fullName ?? r.studentName ?? "Sinh viên",
+            ),
+            studentCode: String(
+              student.StudentCode ?? student.studentCode ?? r.studentCode ?? "",
+            ),
+          };
+        }),
+      );
     } catch {
       setRecords([]);
-      Alert.alert("Lỗi", "Không tải được danh sách điểm danh");
     }
   };
 
   const updateStatus = async (attendanceId: number, status: string) => {
     try {
-      await axios.put(`/attendances/${attendanceId}`, { status });
+      await api.put(`/attendances/${attendanceId}`, { status });
       setRecords((prev) =>
         prev.map((r) => (r.id === attendanceId ? { ...r, status } : r)),
       );
     } catch (err: any) {
       Alert.alert(
         "Lỗi",
-        err.response?.data?.message || "Không cập nhật được trạng thái",
+        err?.response?.data?.message || "Không cập nhật được trạng thái",
       );
     }
   };
@@ -162,6 +249,15 @@ const Attendance = () => {
     }
   };
 
+  const formatTime = (v?: string) => {
+    if (!v) return "—";
+    try {
+      return new Date(v).toLocaleString("vi-VN");
+    } catch {
+      return String(v);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -171,55 +267,73 @@ const Attendance = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.title}>Điểm danh lớp học</Text>
       <Text style={styles.note}>
-        Chọn lớp → tạo phiên QR hoặc xem / sửa trạng thái điểm danh.
+        Chọn học phần → Tạo QR. Chỉ mở được khi hôm nay có lịch dạy (trước giờ
+        học tối đa 15 phút).
       </Text>
 
       <FlatList
-        data={classes}
-        keyExtractor={(item, idx) => String(getClassId(item) || idx)}
+        data={items}
+        keyExtractor={(item) => item.key}
+        contentContainerStyle={{ paddingBottom: 40 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadClasses();
+            }}
+          />
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>Không có lớp phụ trách</Text>
+          <Text style={styles.empty}>
+            Không có lớp / học phần phụ trách. Nhận lớp từ admin trước.
+          </Text>
         }
         renderItem={({ item }) => {
-          const classId = getClassId(item);
-          const active = selectedClassId === classId;
+          const active = selectedKey === item.key;
           return (
-            <View style={[styles.card, active && styles.cardActive]}>
-              <TouchableOpacity onPress={() => setSelectedClassId(classId)}>
-                <Text style={styles.classCode}>
-                  {item.classCode || `Lớp #${classId}`}
-                </Text>
-                {!!item.courseName && (
-                  <Text style={styles.meta}>{item.courseName}</Text>
-                )}
-              </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.card, active && styles.cardActive]}
+              activeOpacity={0.85}
+              onPress={() => setSelectedKey(item.key)}>
+              <Text style={styles.classCode}>{item.classCode}</Text>
+              <Text style={styles.meta}>
+                {item.courseCode ? `${item.courseCode} · ` : ""}
+                {item.courseName}
+              </Text>
 
               <View style={styles.row}>
                 <TouchableOpacity
                   style={[styles.btn, styles.btnPrimary]}
                   disabled={creating}
-                  onPress={() => createSession(classId)}>
+                  onPress={() => createSession(item)}>
                   <Text style={styles.btnPrimaryText}>
-                    {creating ? "Đang tạo..." : "Tạo QR điểm danh"}
+                    {creating && selectedKey === item.key
+                      ? "Đang tạo..."
+                      : "Tạo QR điểm danh"}
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }}
       />
 
-      {/* Modal danh sách điểm danh */}
       <Modal visible={showRecords} animationType="slide">
-        <View style={styles.modal}>
+        <SafeAreaView style={styles.modal}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Danh sách điểm danh</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modalTitle}>Danh sách điểm danh</Text>
+              {!!sessionInfo?.code && (
+                <Text style={styles.meta}>
+                  Mã QR: {sessionInfo.code} · Hết hạn:{" "}
+                  {formatTime(sessionInfo.expiresAt)}
+                </Text>
+              )}
+            </View>
             <TouchableOpacity onPress={() => setShowRecords(false)}>
               <Text style={styles.close}>Đóng</Text>
             </TouchableOpacity>
@@ -231,83 +345,77 @@ const Attendance = () => {
             ListEmptyComponent={
               <Text style={styles.empty}>Chưa có bản ghi điểm danh</Text>
             }
-            renderItem={({ item }) => {
-              const name =
-                item.studentName ||
-                item.enrollment?.student?.user?.fullName ||
-                "Sinh viên";
-              const code =
-                item.studentCode || item.enrollment?.student?.studentCode || "";
-
-              return (
-                <View style={styles.recordCard}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.studentName}>{name}</Text>
-                    {!!code && <Text style={styles.meta}>{code}</Text>}
-                    <Text
-                      style={[
-                        styles.status,
-                        { color: statusColor(item.status) },
-                      ]}>
-                      {statusLabel(item.status)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.statusActions}>
-                    {STATUS_OPTIONS.map((s) => (
-                      <TouchableOpacity
-                        key={s}
-                        style={[
-                          styles.statusChip,
-                          item.status === s && {
-                            backgroundColor: statusColor(s),
-                          },
-                        ]}
-                        onPress={() => updateStatus(item.id, s)}>
-                        <Text
-                          style={[
-                            styles.statusChipText,
-                            item.status === s && { color: "#fff" },
-                          ]}>
-                          {statusLabel(s)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+            renderItem={({ item }) => (
+              <View style={styles.recordCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.studentName}>{item.studentName}</Text>
+                  {!!item.studentCode && (
+                    <Text style={styles.meta}>{item.studentCode}</Text>
+                  )}
+                  <Text
+                    style={[
+                      styles.status,
+                      { color: statusColor(item.status) },
+                    ]}>
+                    {statusLabel(item.status)}
+                  </Text>
                 </View>
-              );
-            }}
+                <View style={styles.statusBtns}>
+                  {STATUS_OPTIONS.map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.statusChip,
+                        item.status === s && {
+                          backgroundColor: statusColor(s),
+                        },
+                      ]}
+                      onPress={() => updateStatus(item.id, s)}>
+                      <Text
+                        style={[
+                          styles.statusChipText,
+                          item.status === s && { color: "#fff" },
+                        ]}>
+                        {statusLabel(s)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
           />
-        </View>
+        </SafeAreaView>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
 export default Attendance;
 
-function formatTime(value?: string) {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleTimeString("vi-VN");
-  } catch {
-    return value;
-  }
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc", padding: 16 },
+  container: { flex: 1, backgroundColor: "#f8fafc", paddingHorizontal: 16 },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#f8fafc",
   },
-  title: { fontSize: 22, fontWeight: "800", color: "#0f172a", marginBottom: 6 },
-  note: { fontSize: 13, color: "#64748b", marginBottom: 14 },
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  note: {
+    fontSize: 13,
+    color: "#64748b",
+    marginBottom: 14,
+    lineHeight: 18,
+  },
   card: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
@@ -316,27 +424,26 @@ const styles = StyleSheet.create({
   cardActive: { borderColor: "#2563eb", backgroundColor: "#eff6ff" },
   classCode: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
   meta: { fontSize: 13, color: "#64748b", marginTop: 2 },
-  row: { flexDirection: "row", marginTop: 12, gap: 8 },
+  row: { marginTop: 12 },
   btn: {
     borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 12,
     alignItems: "center",
   },
-  btnPrimary: { backgroundColor: "#2563eb", flex: 1 },
+  btnPrimary: { backgroundColor: "#2563eb" },
   btnPrimaryText: { color: "#fff", fontWeight: "700" },
-  empty: { textAlign: "center", color: "#94a3b8", marginTop: 40 },
-  modal: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-    paddingTop: 54,
+  empty: {
+    textAlign: "center",
+    color: "#94a3b8",
+    marginTop: 40,
     paddingHorizontal: 16,
   },
+  modal: { flex: 1, backgroundColor: "#f8fafc", padding: 16 },
   modalHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
+    alignItems: "flex-start",
+    marginBottom: 12,
+    gap: 12,
   },
   modalTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
   close: { color: "#2563eb", fontWeight: "700", fontSize: 15 },
@@ -349,20 +456,20 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
   },
   studentName: { fontSize: 15, fontWeight: "700", color: "#0f172a" },
-  status: { marginTop: 4, fontWeight: "700", fontSize: 13 },
-  statusActions: {
+  status: { fontSize: 13, fontWeight: "700", marginTop: 4 },
+  statusBtns: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
     marginTop: 10,
   },
   statusChip: {
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     backgroundColor: "#f8fafc",
   },
-  statusChipText: { fontSize: 12, color: "#334155", fontWeight: "600" },
+  statusChipText: { fontSize: 12, fontWeight: "600", color: "#475569" },
 });

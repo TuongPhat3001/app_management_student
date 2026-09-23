@@ -309,7 +309,6 @@ const buildScheduleMap = (
     if (mapped?.dayKey && map[mapped.dayKey]) {
       map[mapped.dayKey].push(mapped);
     } else {
-      // dayOfWeek lạ → Monday để vẫn hiện, không mất dữ liệu
       const fb = mapScheduleRow(
         { ...item, dayOfWeek: "Monday", day_of_week: "Monday" },
         index,
