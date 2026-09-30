@@ -70,6 +70,12 @@ const ManageAssignments = () => {
   const [loadingSubs, setLoadingSubs] = useState(false);
   const [onlyPending, setOnlyPending] = useState(focusPending);
 
+  // Chấm điểm
+  const [grading, setGrading] = useState<SubmissionItem | null>(null);
+  const [scoreInput, setScoreInput] = useState("");
+  const [feedbackInput, setFeedbackInput] = useState("");
+  const [savingGrade, setSavingGrade] = useState(false);
+
   const mapClass = (c: any): ClassItem | null => {
     const id = Number(c.ID ?? c.id);
     if (!id) return null;
@@ -209,6 +215,64 @@ const ManageAssignments = () => {
     }
   };
 
+  const openGrade = (item: SubmissionItem) => {
+    setGrading(item);
+    setScoreInput(item.score != null ? String(item.score) : "");
+    setFeedbackInput(item.feedback || "");
+  };
+
+  const saveGrade = async () => {
+    if (!grading) return;
+    const score = Number(String(scoreInput).replace(",", "."));
+    if (Number.isNaN(score) || score < 0 || score > 100) {
+      Alert.alert("Lỗi", "Điểm phải từ 0 đến 100");
+      return;
+    }
+    setSavingGrade(true);
+    try {
+      // Backend GradeSubmission: score + feedback
+      // Thử PUT /submissions/:id/grade rồi fallback
+      try {
+        await api.put(`/submissions/${grading.id}/grade`, {
+          score,
+          feedback: feedbackInput.trim(),
+        });
+      } catch (e1: any) {
+        if (e1?.response?.status === 404) {
+          await api.post(`/submissions/${grading.id}/grade`, {
+            score,
+            feedback: feedbackInput.trim(),
+          });
+        } else {
+          throw e1;
+        }
+      }
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === grading.id
+            ? {
+                ...s,
+                score,
+                feedback: feedbackInput.trim(),
+                status: "graded",
+              }
+            : s,
+        ),
+      );
+      setGrading(null);
+      Alert.alert("Thành công", "Đã lưu điểm bài nộp");
+    } catch (err: any) {
+      const d = err?.response?.data;
+      Alert.alert(
+        "Lỗi chấm điểm",
+        [d?.message, d?.error].filter(Boolean).join("\n") ||
+          "Không lưu được điểm",
+      );
+    } finally {
+      setSavingGrade(false);
+    }
+  };
+
   const formatDate = (value?: string) => {
     if (!value) return "—";
     try {
@@ -284,7 +348,10 @@ const ManageAssignments = () => {
               </Text>
             }
             renderItem={({ item }) => (
-              <View style={styles.card}>
+              <TouchableOpacity
+                style={styles.card}
+                activeOpacity={0.85}
+                onPress={() => openGrade(item)}>
                 <Text style={styles.studentName}>{item.studentName}</Text>
                 <Text style={styles.meta}>
                   {item.studentCode} · {formatDate(item.submittedAt)}
@@ -300,10 +367,71 @@ const ManageAssignments = () => {
                     ? ` · Điểm: ${item.score}`
                     : " · Chưa chấm"}
                 </Text>
-              </View>
+                <Text style={styles.link}>
+                  {item.score != null ? "Sửa điểm ›" : "Chấm điểm ›"}
+                </Text>
+              </TouchableOpacity>
             )}
           />
         )}
+
+        {/* Modal chấm điểm */}
+        <Modal visible={!!grading} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalTitle}>
+                Chấm điểm — {grading?.studentName || ""}
+              </Text>
+              <Text style={styles.meta}>
+                {grading?.studentCode}
+                {grading?.submittedAt
+                  ? ` · ${formatDate(grading.submittedAt)}`
+                  : ""}
+              </Text>
+              {!!grading?.content && (
+                <Text style={[styles.content, { marginVertical: 10 }]}>
+                  {grading.content}
+                </Text>
+              )}
+
+              <Text style={styles.label}>Điểm (0–100) *</Text>
+              <TextInput
+                style={styles.input}
+                value={scoreInput}
+                onChangeText={setScoreInput}
+                keyboardType="decimal-pad"
+                placeholder="VD: 85"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={styles.label}>Nhận xét</Text>
+              <TextInput
+                style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+                value={feedbackInput}
+                onChangeText={setFeedbackInput}
+                placeholder="Nhận xét cho sinh viên"
+                placeholderTextColor="#94A3B8"
+                multiline
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.btnCancel}
+                  onPress={() => setGrading(null)}>
+                  <Text style={styles.btnCancelText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.btnSave}
+                  onPress={saveGrade}
+                  disabled={savingGrade}>
+                  <Text style={styles.btnSaveText}>
+                    {savingGrade ? "Đang lưu..." : "Lưu điểm"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
