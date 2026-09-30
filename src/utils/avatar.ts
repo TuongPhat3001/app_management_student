@@ -23,6 +23,22 @@ export async function saveAvatarUri(
   await AsyncStorage.setItem(keyFor(role, userKey), uri);
 }
 
+/** mediaTypes mới (không dùng MediaTypeOptions đã deprecated) */
+function imageMediaTypes(ImagePicker: any) {
+  // SDK mới: MediaType.Image hoặc ['images']
+  if (ImagePicker.MediaType?.Images != null) {
+    return [ImagePicker.MediaType.Images];
+  }
+  if (ImagePicker.MediaType?.Image != null) {
+    return [ImagePicker.MediaType.Image];
+  }
+  return ["images"];
+}
+
+/**
+ * Mở menu đổi ảnh: Thư viện / Máy ảnh.
+ * Cần: npx expo install expo-image-picker
+ */
 export async function pickAvatarImage(): Promise<string | null> {
   let ImagePicker: any;
   try {
@@ -36,70 +52,65 @@ export async function pickAvatarImage(): Promise<string | null> {
   }
 
   return new Promise((resolve) => {
-    Alert.alert(
-      "Đổi ảnh đại diện",
-      "Chọn nguồn ảnh",
-      [
-        {
-          text: "Thư viện ảnh",
-          onPress: async () => {
-            try {
-              const perm =
-                await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (!perm.granted) {
-                Alert.alert(
-                  "Cần quyền",
-                  "Vui lòng cho phép truy cập thư viện ảnh.",
-                );
-                resolve(null);
-                return;
-              }
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? ["images"],
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
-              });
-              if (result.canceled || !result.assets?.[0]?.uri) {
-                resolve(null);
-                return;
-              }
-              resolve(result.assets[0].uri);
-            } catch (e: any) {
-              Alert.alert("Lỗi", e?.message || "Không chọn được ảnh");
+    Alert.alert("Đổi ảnh đại diện", "Chọn nguồn ảnh", [
+      {
+        text: "Thư viện ảnh",
+        onPress: async () => {
+          try {
+            const perm =
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) {
+              Alert.alert(
+                "Cần quyền",
+                "Vui lòng cho phép truy cập thư viện ảnh.",
+              );
               resolve(null);
+              return;
             }
-          },
-        },
-        {
-          text: "Máy ảnh",
-          onPress: async () => {
-            try {
-              const perm = await ImagePicker.requestCameraPermissionsAsync();
-              if (!perm.granted) {
-                Alert.alert("Cần quyền", "Vui lòng cho phép dùng máy ảnh.");
-                resolve(null);
-                return;
-              }
-              const result = await ImagePicker.launchCameraAsync({
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
-              });
-              if (result.canceled || !result.assets?.[0]?.uri) {
-                resolve(null);
-                return;
-              }
-              resolve(result.assets[0].uri);
-            } catch (e: any) {
-              Alert.alert("Lỗi", e?.message || "Không chụp được ảnh");
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: imageMediaTypes(ImagePicker),
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (result.canceled || !result.assets?.[0]?.uri) {
               resolve(null);
+              return;
             }
-          },
+            resolve(result.assets[0].uri);
+          } catch (e: any) {
+            Alert.alert("Lỗi", e?.message || "Không chọn được ảnh");
+            resolve(null);
+          }
         },
-        { text: "Hủy", style: "cancel", onPress: () => resolve(null) },
-      ],
-      { cancelable: true },
-    );
+      },
+      {
+        text: "Máy ảnh",
+        onPress: async () => {
+          try {
+            const perm = await ImagePicker.requestCameraPermissionsAsync();
+            if (!perm.granted) {
+              Alert.alert("Cần quyền", "Vui lòng cho phép dùng máy ảnh.");
+              resolve(null);
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (result.canceled || !result.assets?.[0]?.uri) {
+              resolve(null);
+              return;
+            }
+            resolve(result.assets[0].uri);
+          } catch (e: any) {
+            Alert.alert("Lỗi", e?.message || "Không chụp được ảnh");
+            resolve(null);
+          }
+        },
+      },
+      { text: "Hủy", style: "cancel", onPress: () => resolve(null) },
+    ]);
   });
 }

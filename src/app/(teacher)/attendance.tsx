@@ -41,7 +41,6 @@ type RecordItem = {
 
 const STATUS_OPTIONS = ["present", "absent", "late", "excused"] as const;
 
-/** Backend: Mon Tue Wed Thu Fri Sat Sun */
 function todayBackendDay(): string {
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()];
 }
@@ -88,7 +87,6 @@ function normalizeDayLabel(raw: any): { backend: string; label: string } {
     cn: { backend: "Sun", label: "Chủ nhật" },
   };
   if (map[s]) return map[s];
-  // Already Mon/Tue...
   const up = String(raw ?? "").trim();
   const short = up.slice(0, 3);
   const byShort: Record<string, { backend: string; label: string }> = {
@@ -122,12 +120,6 @@ function parseMinutes(t: string): number {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 }
 
-/**
- * Backend CreateAttendanceSession:
- * - Phải có lịch đúng THỨ HÔM NAY (Mon/Tue/...)
- * - Chỉ mở từ 15 phút trước giờ học đến hết tiết
- * - Có SV đăng ký
- */
 const Attendance = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -382,9 +374,9 @@ const Attendance = () => {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.title}>Điểm danh lớp học</Text>
       <Text style={styles.note}>
-        Hôm nay: <Text style={styles.bold}>{todayLabel}</Text> ({todayB}).
-        Backend chỉ cho mở QR khi học phần có lịch đúng thứ này và trong khung
-        giờ tiết (±15 phút trước giờ học).
+        Hôm nay: <Text style={styles.bold}>{todayLabel}</Text> ({todayB}). Chỉ
+        cho mở QR khi học phần có lịch đúng thứ này và trong khung giờ tiết (±15
+        phút trước giờ học).
       </Text>
 
       <FlatList

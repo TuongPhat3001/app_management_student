@@ -1,6 +1,7 @@
 import api from "@/src/api/axios";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -66,7 +67,11 @@ const Grades = () => {
 
   const loadClasses = useCallback(async () => {
     try {
-      const res = await api.get("/teacher/classes");
+      // Luôn lấy mới từ server (không cache)
+      const res = await api.get("/teacher/classes", {
+        params: { _t: Date.now() },
+        headers: { "Cache-Control": "no-cache" },
+      });
       const raw = res.data?.data ?? res.data ?? [];
       const list = (Array.isArray(raw) ? raw : [])
         .map((c: any) => {
@@ -100,9 +105,13 @@ const Grades = () => {
     }
   }, []);
 
-  useEffect(() => {
-    loadClasses();
-  }, [loadClasses]);
+  // Mỗi lần vào màn hình → lấy lớp mới nhất từ DB
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      loadClasses();
+    }, [loadClasses]),
+  );
 
   const mapEnrollment = (e: any): GradeRow | null => {
     const enrollmentId = Number(e.ID ?? e.id);

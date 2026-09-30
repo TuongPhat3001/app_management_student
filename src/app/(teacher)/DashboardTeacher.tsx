@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -51,9 +51,11 @@ const DashboardTeacher = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchDashboard();
+    }, [fetchDashboard]),
+  );
 
   if (loading) {
     return (
@@ -142,14 +144,14 @@ const DashboardTeacher = () => {
       }>
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>
-            Chúc bạn một ngày làm việc hiệu quả!
-          </Text>
+          <Text style={styles.greeting}>Dashboard</Text>
           <Text style={styles.name}>Giảng viên</Text>
         </View>
         <TouchableOpacity
           style={styles.bellBtn}
-          onPress={() => router.push("/(teacher)/Notification" as any)}
+          onPress={() =>
+            router.push({ pathname: "/(teacher)/Notification" } as any)
+          }
           activeOpacity={0.8}>
           <Ionicons name="notifications-outline" size={22} color="#1A1A1A" />
         </TouchableOpacity>
