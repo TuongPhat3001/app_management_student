@@ -84,9 +84,18 @@ export default function TeacherLayout() {
         }}
       />
 
-      <Tabs.Screen name="Notification" options={{ href: null }} />
-      <Tabs.Screen name="ViewTeachingSchedule" options={{ href: null }} />
-      <Tabs.Screen name="class-offers" options={{ href: null }} />
+      <Tabs.Screen
+        name="Notification"
+        options={{ href: null, headerShown: false, title: "Thông báo" }}
+      />
+      <Tabs.Screen
+        name="ViewTeachingSchedule"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen
+        name="class-offers"
+        options={{ href: null, headerShown: false }}
+      />
     </Tabs>
   );
 }

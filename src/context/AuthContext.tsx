@@ -1,4 +1,4 @@
-import setApiToken from "@/src/api/axios";
+import { setApiToken } from "@/src/api/axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import React, {
@@ -37,6 +37,53 @@ async function readJwt(): Promise<string | null> {
   }
 }
 
+async function readRole(): Promise<string | null> {
+  try {
+    if (Platform.OS === "web") {
+      return await AsyncStorage.getItem("role");
+    }
+    return (
+      (await SecureStore.getItemAsync("role")) ||
+      (await AsyncStorage.getItem("role"))
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function writeJwt(token: string) {
+  await AsyncStorage.setItem("authToken", token);
+  if (Platform.OS === "web") {
+    await AsyncStorage.setItem("jwt_token", token);
+  } else {
+    await SecureStore.setItemAsync("jwt_token", token);
+  }
+}
+
+async function writeRole(role: string) {
+  await AsyncStorage.setItem("role", role);
+  if (Platform.OS !== "web") {
+    await SecureStore.setItemAsync("role", role);
+  }
+}
+
+async function clearAuthStorage() {
+  await AsyncStorage.multiRemove([
+    "authToken",
+    "jwt_token",
+    "userData",
+    "role",
+  ]);
+  if (Platform.OS !== "web") {
+    try {
+      await SecureStore.deleteItemAsync("jwt_token");
+    } catch {}
+    try {
+      await SecureStore.deleteItemAsync("role");
+    } catch {}
+  }
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -50,13 +97,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const storedToken = await readJwt();
       const storedUser = await AsyncStorage.getItem("userData");
+      const storedRole = await readRole();
+
       if (storedToken) {
         setToken(storedToken);
         setApiToken(storedToken);
-        if (storedUser) setUser(JSON.parse(storedUser));
+
+        let parsed: any = null;
+        if (storedUser) {
+          try {
+            parsed = JSON.parse(storedUser);
+          } catch {
+            parsed = null;
+          }
+        }
+        if (parsed) {
+          if (!parsed.role && storedRole) parsed.role = storedRole;
+          setUser(parsed);
+        } else if (storedRole) {
+          setUser({ role: storedRole });
+        }
       }
     } catch (error) {
-      console.error("Error loading auth:", error);
+      console.log("Error loading auth:", error);
     } finally {
       setIsLoading(false);
     }
@@ -65,25 +128,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (newToken: string, userData?: any) => {
     setToken(newToken);
     setApiToken(newToken);
-    if (userData) setUser(userData);
-    await AsyncStorage.setItem("authToken", newToken);
-    if (userData)
-      await AsyncStorage.setItem("userData", JSON.stringify(userData));
+
+    const role = String(userData?.role || "").toLowerCase();
+    const merged = userData
+      ? { ...userData, role: role || userData.role }
+      : null;
+    if (merged) setUser(merged);
+
+    await writeJwt(newToken);
+    if (merged) {
+      await AsyncStorage.setItem("userData", JSON.stringify(merged));
+    }
+    if (role) {
+      await writeRole(role);
+    }
   };
 
   const logout = async () => {
     setToken(null);
     setUser(null);
-    delete setApiToken.defaults.headers.common.Authorization;
-    await AsyncStorage.removeItem("authToken");
-    await AsyncStorage.removeItem("userData");
-    try {
-      if (Platform.OS === "web") {
-        await AsyncStorage.removeItem("jwt_token");
-      } else {
-        await SecureStore.deleteItemAsync("jwt_token");
-      }
-    } catch {}
+    setApiToken(null);
+    await clearAuthStorage();
   };
 
   return (

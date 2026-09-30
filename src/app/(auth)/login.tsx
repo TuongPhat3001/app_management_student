@@ -1,7 +1,6 @@
+import { useAuth } from "@/src/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -32,6 +31,7 @@ const LoginScreen = () => {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { login: authLogin } = useAuth();
 
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(36)).current;
@@ -102,25 +102,20 @@ const LoginScreen = () => {
       const data = response.data;
 
       if (data.token) {
+        // Lưu token + user (iOS/Android) qua AuthContext
+        await authLogin(data.token, data.user || { role: data.user?.role });
         setApiToken(data.token);
-        if (Platform.OS === "web") {
-          await AsyncStorage.setItem("jwt_token", data.token);
-          await AsyncStorage.setItem("role", data.user.role);
-        } else {
-          await SecureStore.setItemAsync("jwt_token", data.token);
-          await SecureStore.setItemAsync("role", data.user.role);
-        }
 
         const navigateToDashboard = () => {
           const role = String(data.user?.role || "").toLowerCase();
           if (role === "student") {
-            router.replace("/(student)/DashboardStudent");
+            router.replace("/(student)/DashboardStudent" as any);
           } else if (role === "teacher") {
-            router.replace("/(teacher)/DashboardTeacher");
+            router.replace("/(teacher)/DashboardTeacher" as any);
           } else if (role === "admin") {
-            router.replace("/(admin)/DashboardAdmin");
+            router.replace("/(admin)/DashboardAdmin" as any);
           } else {
-            router.replace("/(auth)/login");
+            router.replace("/(auth)/login" as any);
           }
         };
 

@@ -39,6 +39,7 @@ LogBox.ignoreLogs([
   "status code 404",
   "Request failed with status code 404",
   "Uncaught (in promise",
+  "Unmatched Route",
 ]);
 
 const API_BASE = "http://192.168.20.43:8080";
@@ -63,7 +64,6 @@ export function getApiToken() {
 
 async function resolveToken(): Promise<string | null> {
   if (memoryToken) return memoryToken;
-
   try {
     const token =
       Platform.OS === "web"
@@ -71,10 +71,7 @@ async function resolveToken(): Promise<string | null> {
           (await AsyncStorage.getItem("authToken"))
         : (await SecureStore.getItemAsync("jwt_token")) ||
           (await AsyncStorage.getItem("authToken"));
-
-    if (token) {
-      memoryToken = token;
-    }
+    if (token) memoryToken = token;
     return token;
   } catch {
     return null;
@@ -89,32 +86,28 @@ apiClient.interceptors.request.use(async (config) => {
   ) {
     config.url = `/${config.url}`;
   }
-
   const token = await resolveToken();
   if (token) {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
-
-  if (__DEV__) {
-    console.log(
-      "[axios]",
-      (config.method || "get").toUpperCase(),
-      `${config.baseURL || ""}${config.url || ""}`,
-      token ? "(auth)" : "(no token)",
-    );
-  }
-
   return config;
 });
 
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (__DEV__) {
-      const status = error?.response?.status;
-      const url = `${error?.config?.baseURL || ""}${error?.config?.url || ""}`;
-      console.log(`[axios] ERR ${status || "?"} ${url}`);
+    const status = error?.response?.status;
+    const method = String(error?.config?.method || "get").toUpperCase();
+    if (status === 404 && method === "GET") {
+      return Promise.resolve({
+        data: error?.response?.data ?? { data: [] },
+        status: 404,
+        statusText: "Not Found",
+        headers: error?.response?.headers ?? {},
+        config: error.config,
+        request: error.request,
+      });
     }
     return Promise.reject(error);
   },

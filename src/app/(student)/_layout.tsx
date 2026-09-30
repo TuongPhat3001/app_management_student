@@ -85,11 +85,26 @@ export default function StudentLayout() {
         }}
       />
 
-      <Tabs.Screen name="Notification" options={{ href: null }} />
-      <Tabs.Screen name="QrAttendance" options={{ href: null }} />
-      <Tabs.Screen name="StudentSubmissions" options={{ href: null }} />
-      <Tabs.Screen name="StudentExercises" options={{ href: null }} />
-      <Tabs.Screen name="ViewTranscript" options={{ href: null }} />
+      <Tabs.Screen
+        name="Notification"
+        options={{ href: null, headerShown: false, title: "Thông báo" }}
+      />
+      <Tabs.Screen
+        name="QrAttendance"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen
+        name="StudentSubmissions"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen
+        name="StudentExercises"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen
+        name="ViewTranscript"
+        options={{ href: null, headerShown: false }}
+      />
     </Tabs>
   );
 }
