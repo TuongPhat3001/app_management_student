@@ -60,19 +60,6 @@ const Profile = () => {
       label: "Đổi mật khẩu",
       onPress: () => router.push("/(auth)/ChangePassword"),
     },
-    {
-      id: "settings",
-      icon: "settings-outline" as const,
-      label: "Cài đặt",
-      onPress: () => Alert.alert("Cài đặt", "Tính năng đang phát triển."),
-    },
-    {
-      id: "help",
-      icon: "help-circle-outline" as const,
-      label: "Trợ giúp & Hỗ trợ",
-      onPress: () =>
-        Alert.alert("Hỗ trợ", "Liên hệ admin hệ thống để được hỗ trợ."),
-    },
   ];
 
   return (

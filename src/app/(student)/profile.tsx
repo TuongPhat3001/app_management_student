@@ -55,18 +55,6 @@ const Profile = () => {
       label: "Đổi mật khẩu",
       onPress: () => router.push("/(auth)/ChangePassword"),
     },
-    {
-      id: "settings",
-      icon: "settings-outline" as const,
-      label: "Cài đặt",
-      onPress: () => {},
-    },
-    {
-      id: "help",
-      icon: "help-circle-outline" as const,
-      label: "Trợ giúp & Hỗ trợ",
-      onPress: () => {},
-    },
   ];
 
   return (

@@ -23,12 +23,7 @@ const Profile = () => {
     [user],
   );
   const displayId = useMemo(
-    () =>
-      user?.teacherCode ||
-      user?.teacherId ||
-      user?.email ||
-      user?.username ||
-      "GV",
+    () => user?.teacherCode || user?.email || user?.username || "GV",
     [user],
   );
 
@@ -57,26 +52,13 @@ const Profile = () => {
       icon: "person-outline" as const,
       label: "Thông tin cá nhân",
       onPress: () =>
-        Alert.alert("Thông tin", `${displayName}\nMã GV: ${displayId}`),
+        Alert.alert("Thông tin", `${displayName}\nVai trò: Giảng viên`),
     },
     {
       id: "password",
       icon: "lock-closed-outline" as const,
       label: "Đổi mật khẩu",
       onPress: () => router.push("/(auth)/ChangePassword"),
-    },
-    {
-      id: "settings",
-      icon: "settings-outline" as const,
-      label: "Cài đặt",
-      onPress: () => Alert.alert("Cài đặt", "Tính năng đang phát triển."),
-    },
-    {
-      id: "help",
-      icon: "help-circle-outline" as const,
-      label: "Trợ giúp & Hỗ trợ",
-      onPress: () =>
-        Alert.alert("Hỗ trợ", "Liên hệ phòng đào tạo để được hỗ trợ."),
     },
   ];
 
@@ -93,7 +75,7 @@ const Profile = () => {
         <View style={styles.profileSection}>
           <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
-              <Ionicons name="school" size={44} color="#9CA3AF" />
+              <Ionicons name="person" size={48} color="#9CA3AF" />
             </View>
           </View>
           <Text style={styles.userName}>{displayName}</Text>
@@ -173,31 +155,30 @@ const styles = StyleSheet.create({
   },
   userId: { fontSize: 14, color: "#6B7280", marginBottom: 8 },
   roleBadge: {
-    backgroundColor: "#DBEAFE",
+    backgroundColor: "#EDE9FE",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  roleBadgeText: { fontSize: 12, fontWeight: "700", color: "#2563EB" },
+  roleBadgeText: { fontSize: 12, fontWeight: "700", color: "#5B5BD6" },
   menuCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    overflow: "hidden",
+    marginBottom: 20,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
     paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  menuLeft: { flexDirection: "row", alignItems: "center" },
+  menuItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  menuLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   menuIconWrap: {
     width: 36,
     height: 36,
@@ -205,18 +186,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#EDE9FE",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
   },
-  menuLabel: { fontSize: 15, fontWeight: "500", color: "#1A1A1A" },
+  menuLabel: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingVertical: 16,
-    marginTop: 16,
     gap: 8,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    paddingVertical: 14,
   },
-  logoutText: { fontSize: 15, fontWeight: "600", color: "#EF4444" },
+  logoutText: { fontSize: 15, fontWeight: "700", color: "#EF4444" },
 });
