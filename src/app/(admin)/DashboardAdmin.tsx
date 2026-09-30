@@ -32,7 +32,6 @@ const DashboardAdmin = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      // Backend: DashboardAdmin → pendingClassOffers, newNotifications, totalClasses
       let data: any = null;
       for (const url of [
         "/dashboard/admin",
@@ -43,9 +42,7 @@ const DashboardAdmin = () => {
           const res = await apiClient.get(url);
           data = res.data?.data ?? res.data;
           if (data) break;
-        } catch {
-          /* try next */
-        }
+        } catch {}
       }
 
       let totalClasses = Number(data?.totalClasses ?? data?.total_classes ?? 0);
@@ -60,7 +57,6 @@ const DashboardAdmin = () => {
         data?.newNotifications ?? data?.new_notifications ?? 0,
       );
 
-      // Fallback đếm trực tiếp nếu dashboard không có / thiếu số
       if (!data || (!totalClasses && !pendingAssign && !newNotifications)) {
         try {
           const [cRes, oRes, nRes] = await Promise.all([
@@ -108,7 +104,6 @@ const DashboardAdmin = () => {
     })();
   }, [fetchStats]);
 
-  // Đồng bộ lại khi quay về dashboard
   useFocusEffect(
     useCallback(() => {
       fetchStats();
@@ -209,9 +204,7 @@ const DashboardAdmin = () => {
         onPress: async () => {
           try {
             await logoutAPI();
-          } catch {
-            // vẫn xóa local
-          }
+          } catch {}
           await logout();
           router.replace("/(auth)/login");
         },
@@ -233,18 +226,13 @@ const DashboardAdmin = () => {
 
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Admin Dashboard</Text>
+          <Text style={styles.headerTitle}>Chúc bạn một ngày tốt lành!</Text>
           <Text style={styles.headerSub}>Quản trị hệ thống</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
             <Ionicons name="refresh" size={20} color="#5B5BD6" />
           </TouchableOpacity>
-          {/* <TouchableOpacity
-            style={styles.logoutHeaderBtn}
-            onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-          </TouchableOpacity> */}
         </View>
       </View>
 

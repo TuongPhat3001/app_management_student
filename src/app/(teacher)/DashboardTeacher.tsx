@@ -142,7 +142,9 @@ const DashboardTeacher = () => {
       }>
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Dashboard</Text>
+          <Text style={styles.greeting}>
+            Chúc bạn một ngày làm việc hiệu quả!
+          </Text>
           <Text style={styles.name}>Giảng viên</Text>
         </View>
         <TouchableOpacity

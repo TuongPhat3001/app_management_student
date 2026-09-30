@@ -1,9 +1,15 @@
 import { useAuth } from "@/src/context/AuthContext";
+import {
+  loadAvatarUri,
+  pickAvatarImage,
+  saveAvatarUri,
+} from "@/src/utils/avatar";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,16 +22,34 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const Profile = () => {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
-  const profile = {
-    name: user?.fullName || user?.name || user?.username || "Sinh viên",
-    studentId:
-      user?.studentCode ||
-      user?.studentId ||
-      user?.email ||
-      user?.username ||
-      "SV",
-    avatar: null as string | null,
+  const profile = useMemo(
+    () => ({
+      name: user?.fullName || user?.name || user?.username || "Sinh viên",
+      studentId:
+        user?.studentCode ||
+        user?.studentId ||
+        user?.email ||
+        user?.username ||
+        "SV",
+    }),
+    [user],
+  );
+
+  const userKey = String(
+    user?.id || user?.username || user?.email || profile.studentId,
+  );
+
+  useEffect(() => {
+    loadAvatarUri("student", userKey).then(setAvatarUri);
+  }, [userKey]);
+
+  const onChangeAvatar = async () => {
+    const uri = await pickAvatarImage();
+    if (!uri) return;
+    await saveAvatarUri("student", userKey, uri);
+    setAvatarUri(uri);
   };
 
   const handleLogout = () => {
@@ -47,7 +71,8 @@ const Profile = () => {
       id: "info",
       icon: "person-outline" as const,
       label: "Thông tin cá nhân",
-      onPress: () => {},
+      onPress: () =>
+        Alert.alert("Thông tin", `${profile.name}\n${profile.studentId}`),
     },
     {
       id: "password",
@@ -60,8 +85,6 @@ const Profile = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#F3EEFF" />
-
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Hồ sơ</Text>
       </View>
@@ -69,13 +92,19 @@ const Profile = () => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        {/* Avatar + Name */}
         <View style={styles.profileSection}>
           <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
-              <Ionicons name="person" size={48} color="#9CA3AF" />
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+              ) : (
+                <Ionicons name="person" size={48} color="#9CA3AF" />
+              )}
             </View>
-            <TouchableOpacity style={styles.cameraBtn} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.cameraBtn}
+              activeOpacity={0.8}
+              onPress={onChangeAvatar}>
               <Ionicons name="camera" size={14} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -84,7 +113,6 @@ const Profile = () => {
           <Text style={styles.userId}>{profile.studentId}</Text>
         </View>
 
-        {/* Menu Card */}
         <View style={styles.menuCard}>
           {menuItems.map((item, index) => (
             <TouchableOpacity
@@ -106,7 +134,6 @@ const Profile = () => {
           ))}
         </View>
 
-        {/* Logout */}
         <TouchableOpacity
           style={styles.logoutBtn}
           onPress={handleLogout}
@@ -122,10 +149,7 @@ const Profile = () => {
 export default Profile;
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F3EEFF",
-  },
+  safeArea: { flex: 1, backgroundColor: "#F3EEFF" },
   header: {
     paddingHorizontal: 20,
     paddingVertical: 16,
@@ -133,26 +157,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F0F0F0",
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1A1A1A",
-  },
+  headerTitle: { fontSize: 22, fontWeight: "700", color: "#1A1A1A" },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 28,
     paddingBottom: 40,
   },
-
-  // Profile section
-  profileSection: {
-    alignItems: "center",
-    marginBottom: 28,
-  },
-  avatarWrapper: {
-    position: "relative",
-    marginBottom: 14,
-  },
+  profileSection: { alignItems: "center", marginBottom: 28 },
+  avatarWrapper: { position: "relative", marginBottom: 14 },
   avatar: {
     width: 96,
     height: 96,
@@ -162,7 +174,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 3,
     borderColor: "#FFFFFF",
+    overflow: "hidden",
   },
+  avatarImg: { width: "100%", height: "100%" },
   cameraBtn: {
     position: "absolute",
     bottom: 2,
@@ -182,37 +196,25 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
     marginBottom: 4,
   },
-  userId: {
-    fontSize: 14,
-    color: "#6B7280",
-  },
-
-  // Menu
+  userId: { fontSize: 14, color: "#6B7280" },
   menuCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    overflow: "hidden",
+    marginBottom: 20,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
     paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   menuItemBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
-  menuLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  menuLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   menuIconWrap: {
     width: 36,
     height: 36,
@@ -220,33 +222,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#EDE9FE",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
   },
-  menuLabel: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: "#1A1A1A",
-  },
-
-  // Logout
+  menuLabel: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingVertical: 16,
-    marginTop: 16,
     gap: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    paddingVertical: 14,
   },
-  logoutText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#EF4444",
-  },
+  logoutText: { fontSize: 15, fontWeight: "700", color: "#EF4444" },
 });

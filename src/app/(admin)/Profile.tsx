@@ -1,10 +1,16 @@
 import { logoutAPI } from "@/src/api/authApi";
 import { useAuth } from "@/src/context/AuthContext";
+import {
+  loadAvatarUri,
+  pickAvatarImage,
+  saveAvatarUri,
+} from "@/src/utils/avatar";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -17,6 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const Profile = () => {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
 
   const displayName = useMemo(
     () => user?.fullName || user?.name || user?.username || "Admin Hệ thống",
@@ -26,6 +33,20 @@ const Profile = () => {
     () => user?.email || user?.username || user?.adminCode || "admin",
     [user],
   );
+  const userKey = String(
+    user?.id || user?.username || user?.email || displayId,
+  );
+
+  useEffect(() => {
+    loadAvatarUri("admin", userKey).then(setAvatarUri);
+  }, [userKey]);
+
+  const onChangeAvatar = async () => {
+    const uri = await pickAvatarImage();
+    if (!uri) return;
+    await saveAvatarUri("admin", userKey, uri);
+    setAvatarUri(uri);
+  };
 
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn có chắc muốn đăng xuất?", [
@@ -36,9 +57,7 @@ const Profile = () => {
         onPress: async () => {
           try {
             await logoutAPI();
-          } catch {
-            // ignore
-          }
+          } catch {}
           await logout();
           router.replace("/(auth)/login");
         },
@@ -75,8 +94,18 @@ const Profile = () => {
         <View style={styles.profileSection}>
           <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
-              <Ionicons name="shield-checkmark" size={44} color="#9CA3AF" />
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+              ) : (
+                <Ionicons name="shield-checkmark" size={44} color="#9CA3AF" />
+              )}
             </View>
+            <TouchableOpacity
+              style={styles.cameraBtn}
+              activeOpacity={0.8}
+              onPress={onChangeAvatar}>
+              <Ionicons name="camera" size={14} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
           <Text style={styles.userName}>{displayName}</Text>
           <Text style={styles.userId}>{displayId}</Text>
@@ -146,6 +175,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 3,
     borderColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+  avatarImg: { width: "100%", height: "100%" },
+  cameraBtn: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#5B5BD6",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
   userName: {
     fontSize: 20,
@@ -164,22 +208,21 @@ const styles = StyleSheet.create({
   menuCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    overflow: "hidden",
+    marginBottom: 20,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
     paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  menuItemBorder: { borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
-  menuLeft: { flexDirection: "row", alignItems: "center" },
+  menuItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  menuLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   menuIconWrap: {
     width: 36,
     height: 36,
@@ -187,18 +230,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#EDE9FE",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
   },
-  menuLabel: { fontSize: 15, fontWeight: "500", color: "#1A1A1A" },
+  menuLabel: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingVertical: 16,
-    marginTop: 16,
     gap: 8,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    paddingVertical: 14,
   },
-  logoutText: { fontSize: 15, fontWeight: "600", color: "#EF4444" },
+  logoutText: { fontSize: 15, fontWeight: "700", color: "#EF4444" },
 });
