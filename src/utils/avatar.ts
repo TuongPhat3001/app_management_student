@@ -23,9 +23,7 @@ export async function saveAvatarUri(
   await AsyncStorage.setItem(keyFor(role, userKey), uri);
 }
 
-/** mediaTypes mới (không dùng MediaTypeOptions đã deprecated) */
 function imageMediaTypes(ImagePicker: any) {
-  // SDK mới: MediaType.Image hoặc ['images']
   if (ImagePicker.MediaType?.Images != null) {
     return [ImagePicker.MediaType.Images];
   }
@@ -35,10 +33,6 @@ function imageMediaTypes(ImagePicker: any) {
   return ["images"];
 }
 
-/**
- * Mở menu đổi ảnh: Thư viện / Máy ảnh.
- * Cần: npx expo install expo-image-picker
- */
 export async function pickAvatarImage(): Promise<string | null> {
   let ImagePicker: any;
   try {
