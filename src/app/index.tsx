@@ -7,7 +7,7 @@ import {
   Animated,
   Dimensions,
   Easing,
-  LogBox,
+  Image,
   Platform,
   StatusBar,
   StyleSheet,
@@ -17,16 +17,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-LogBox.ignoreLogs([
-  "ExponentAV",
-  "expo-av native module",
-  "[index] expo-av",
-  "Cannot find native module",
-]);
-
 const { width, height } = Dimensions.get("window");
 
-function dashboardByRole(role?: string | null) {
+function dashboardByRole(role: any) {
   const r = (role || "").toLowerCase();
   if (r === "admin") return "/(admin)/DashboardAdmin";
   if (r === "teacher") return "/(teacher)/DashboardTeacher";
@@ -34,65 +27,33 @@ function dashboardByRole(role?: string | null) {
   return null;
 }
 
-type Slide = {
-  key: string;
-  label: string;
-  source: any;
-  color: string;
-  color2: string;
-};
-
-const SLIDES: Slide[] = [
+const SLIDES = [
   {
     key: "sinhvien",
-    label: "Đời sống sinh viên",
-    source: require("../assets/videos/sinhvien.mp4"),
-    color: "#1B4332",
-    color2: "#2D6A4F",
+    labelVi: "Sinh viên",
+    image: require("../assets/images/home/sinhvien.gif"),
   },
   {
     key: "khuonvien",
-    label: "Khuôn viên",
-    source: require("../assets/videos/khuonvien.mp4"),
-    color: "#1A3A2A",
-    color2: "#40916C",
+    labelVi: "Khuôn viên",
+    image: require("../assets/images/home/khuonvien.jpg"),
   },
   {
     key: "phonghoc",
-    label: "Phòng học",
-    source: require("../assets/videos/phonghoc.mp4"),
-    color: "#0F2C24",
-    color2: "#1B4332",
+    labelVi: "Phòng học",
+    image: require("../assets/images/home/phonghoc.jpg"),
   },
   {
     key: "thuvien",
-    label: "Thư viện",
-    source: require("../assets/videos/thuvien.mp4"),
-    color: "#1C2E3A",
-    color2: "#3D5A80",
+    labelVi: "Thư viện",
+    image: require("../assets/images/home/thuvien.jpg"),
   },
   {
     key: "phongmay",
-    label: "Phòng máy",
-    source: require("../assets/videos/phongmay.mp4"),
-    color: "#1A2433",
-    color2: "#415A77",
+    labelVi: "Phòng máy",
+    image: require("../assets/images/home/phongmay.jpg"),
   },
 ];
-
-let ExpoVideo: any = null;
-let ResizeMode: any = { COVER: "cover" };
-let avAvailable = false;
-try {
-  const av = require("expo-av");
-  if (av?.Video) {
-    ExpoVideo = av.Video;
-    ResizeMode = av.ResizeMode || ResizeMode;
-    avAvailable = true;
-  }
-} catch {
-  avAvailable = false;
-}
 
 export default function Index() {
   const { token, user, isLoading } = useAuth();
@@ -103,25 +64,25 @@ export default function Index() {
 
   const fade = useRef(new Animated.Value(0)).current;
   const slideY = useRef(new Animated.Value(24)).current;
-  const bgAnim = useRef(new Animated.Value(0)).current;
+  const imgOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (paused) return;
     const t = setInterval(() => {
       setActive((i) => (i + 1) % SLIDES.length);
-    }, 7000);
+    }, 5000);
     return () => clearInterval(t);
   }, [paused]);
 
   useEffect(() => {
-    bgAnim.setValue(0);
-    Animated.timing(bgAnim, {
+    imgOpacity.setValue(0.25);
+    Animated.timing(imgOpacity, {
       toValue: 1,
-      duration: 600,
-      useNativeDriver: false,
+      duration: 450,
+      useNativeDriver: true,
       easing: Easing.out(Easing.cubic),
     }).start();
-  }, [active, bgAnim]);
+  }, [active, imgOpacity]);
 
   useEffect(() => {
     Animated.parallel([
@@ -144,28 +105,24 @@ export default function Index() {
 
   useEffect(() => {
     if (isLoading || !ready) return;
-    const dash = token ? dashboardByRole(user?.role) : null;
-    if (dash) router.replace(dash as any);
-  }, [isLoading, ready, token, user?.role, router]);
+    const dash = token ? dashboardByRole(user && user.role) : null;
+    if (dash) router.replace(dash);
+  }, [isLoading, ready, token, user, router]);
 
   const goLogin = useCallback(() => {
-    const dash = token ? dashboardByRole(user?.role) : null;
-    if (dash) router.replace(dash as any);
+    const dash = token ? dashboardByRole(user && user.role) : null;
+    if (dash) router.replace(dash);
     else router.push("/(auth)/login");
-  }, [token, user?.role, router]);
+  }, [token, user, router]);
 
-  const selectSlide = (idx: number) => {
+  const selectSlide = (idx: React.SetStateAction<number>) => {
     setPaused(true);
     setActive(idx);
-    setTimeout(() => setPaused(false), 12000);
+    setTimeout(() => setPaused(false), 10000);
   };
 
   const current = SLIDES[active];
-  const scriptFont = Platform.select({
-    ios: "Snell Roundhand",
-    android: "serif",
-    default: "serif",
-  }) as string;
+  const scriptFont = Platform.OS === "ios" ? "Snell Roundhand" : "serif";
 
   return (
     <View style={styles.root}>
@@ -175,30 +132,17 @@ export default function Index() {
         backgroundColor="transparent"
       />
 
-      <View
-        style={[styles.videoWrap, { backgroundColor: current.color }]}
+      <Animated.View
+        style={[styles.bgWrap, { opacity: imgOpacity }]}
         pointerEvents="none">
-        {avAvailable && ExpoVideo ? (
-          <ExpoVideo
-            key={current.key}
-            source={current.source}
-            style={styles.video}
-            resizeMode={ResizeMode.COVER || "cover"}
-            shouldPlay
-            isLooping
-            isMuted
-            useNativeControls={false}
-          />
-        ) : (
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              { backgroundColor: current.color2, opacity: 0.45 },
-            ]}
-          />
-        )}
+        <Image
+          key={current.key}
+          source={current.image}
+          style={styles.bgImage}
+          resizeMode="cover"
+        />
         <View style={styles.dim} />
-      </View>
+      </Animated.View>
 
       <SafeAreaView style={styles.safe}>
         <Animated.View
@@ -262,14 +206,6 @@ export default function Index() {
               <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-
-          <View style={styles.quickLinks}>
-            <Text style={styles.quickLink}>Thông báo mới</Text>
-            <Text style={styles.quickDot}>·</Text>
-            <Text style={styles.quickLink}>Chương trình học</Text>
-            <Text style={styles.quickDot}>·</Text>
-            <Text style={styles.quickLink}>Liên hệ nhà trường</Text>
-          </View>
         </Animated.View>
 
         <View style={styles.bottomBar}>
@@ -293,7 +229,7 @@ export default function Index() {
                   <Text
                     style={[styles.tabText, on && styles.tabTextOn]}
                     numberOfLines={1}>
-                    {s.label}
+                    {s.labelVi}
                   </Text>
                 </TouchableOpacity>
               );
@@ -314,15 +250,29 @@ export default function Index() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0B1220" },
   safe: { flex: 1 },
-  videoWrap: {
-    ...StyleSheet.absoluteFill,
-    width,
-    height,
+  bgWrap: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: width,
+    height: height,
   },
-  video: { width, height },
+  bgImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: width,
+    height: height,
+  },
   dim: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(8, 16, 12, 0.55)",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
   },
   header: {
     flexDirection: "row",
@@ -380,7 +330,7 @@ const styles = StyleSheet.create({
   },
   heroLead: {
     fontSize: 14,
-    color: "rgba(255,255,255,0.88)",
+    color: "rgba(255,255,255,0.92)",
     lineHeight: 21,
     maxWidth: width * 0.88,
     marginBottom: 22,
@@ -412,18 +362,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ctaSecondaryText: { color: "#FFFFFF", fontWeight: "600", fontSize: 13 },
-  quickLinks: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 8,
-  },
-  quickLink: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 12,
-    textDecorationLine: "underline",
-  },
-  quickDot: { color: "rgba(255,255,255,0.4)", fontSize: 12 },
   bottomBar: {
     flexDirection: "row",
     alignItems: "center",
