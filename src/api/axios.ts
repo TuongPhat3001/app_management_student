@@ -30,19 +30,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as SecureStore from "expo-secure-store";
-import { LogBox, Platform } from "react-native";
+import { Platform } from "react-native";
 
-LogBox.ignoreLogs([
-  "Too many screens defined",
-  'Route "page" is extraneous',
-  "AxiosError",
-  "status code 404",
-  "Request failed with status code 404",
-  "Uncaught (in promise",
-  "Unmatched Route",
-]);
-
-const API_BASE = "http://192.168.20.43:8080";
+const API_BASE = "http://192.168.20.25:8080";
 
 const apiClient = axios.create({
   baseURL: API_BASE,
