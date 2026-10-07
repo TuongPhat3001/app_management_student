@@ -80,14 +80,10 @@ const SLIDES: Slide[] = [
   },
 ];
 
-// Thử load video native (expo-av). Expo Go một số bản / dev client cũ sẽ không có.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let ExpoVideo: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let ResizeMode: any = { COVER: "cover" };
 let avAvailable = false;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const av = require("expo-av");
   if (av?.Video) {
     ExpoVideo = av.Video;
