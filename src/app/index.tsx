@@ -36,22 +36,22 @@ const SLIDES = [
   {
     key: "khuonvien",
     labelVi: "Khuôn viên",
-    image: require("../assets/images/home/khuonvien.jpg"),
+    image: require("../assets/images/home/khuonvien.gif"),
   },
   {
     key: "phonghoc",
     labelVi: "Phòng học",
-    image: require("../assets/images/home/phonghoc.jpg"),
+    image: require("../assets/images/home/phonghoc.gif"),
   },
   {
     key: "thuvien",
     labelVi: "Thư viện",
-    image: require("../assets/images/home/thuvien.jpg"),
+    image: require("../assets/images/home/thuvien.gif"),
   },
   {
     key: "phongmay",
     labelVi: "Phòng máy",
-    image: require("../assets/images/home/phongmay.jpg"),
+    image: require("../assets/images/home/phongmay.gif"),
   },
 ];
 
