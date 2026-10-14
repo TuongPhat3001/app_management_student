@@ -200,7 +200,7 @@ export default function Index() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.ctaSecondary}
-              onPress={() => selectSlide(0)}
+              onPress={() => router.push("/programs")}
               activeOpacity={0.9}>
               <Text style={styles.ctaSecondaryText}>Tìm hiểu ngành học</Text>
               <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
