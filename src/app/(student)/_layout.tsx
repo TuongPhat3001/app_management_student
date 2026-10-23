@@ -86,6 +86,10 @@ export default function StudentLayout() {
       />
 
       <Tabs.Screen
+        name="AcademicWarnings"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen
         name="Notification"
         options={{ href: null, headerShown: false, title: "Thông báo" }}
       />

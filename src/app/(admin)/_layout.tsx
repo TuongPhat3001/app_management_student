@@ -85,6 +85,19 @@ export default function AdminLayout() {
       />
 
       <Tabs.Screen name="CreateIdStudent" options={{ href: null }} />
+      <Tabs.Screen
+        name="AcademicWarnings"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen
+        name="Consultations"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen name="Rooms" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen
+        name="StudentDetail"
+        options={{ href: null, headerShown: false }}
+      />
       <Tabs.Screen name="AddStudentToClass" options={{ href: null }} />
       <Tabs.Screen name="CreateIdTeacher" options={{ href: null }} />
       <Tabs.Screen name="CreateClass" options={{ href: null }} />

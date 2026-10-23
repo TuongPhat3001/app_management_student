@@ -184,6 +184,24 @@ const DashboardAdmin = () => {
       route: "/(admin)/Reports",
       icon: "stats-chart-outline" as const,
     },
+    {
+      id: "warnings",
+      label: "Cảnh báo học vụ",
+      route: "/(admin)/AcademicWarnings",
+      icon: "warning-outline" as const,
+    },
+    {
+      id: "consult",
+      label: "Yêu cầu tư vấn",
+      route: "/(admin)/Consultations",
+      icon: "chatbubbles-outline" as const,
+    },
+    {
+      id: "rooms",
+      label: "Quản lý phòng học",
+      route: "/(admin)/Rooms",
+      icon: "business-outline" as const,
+    },
   ];
 
   const goTo = (route: string) => {
@@ -226,7 +244,7 @@ const DashboardAdmin = () => {
 
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Chúc bạn một ngày tốt lành!</Text>
+          <Text style={styles.headerTitle}>Chúc một ngày tốt lành!</Text>
           <Text style={styles.headerSub}>Quản trị hệ thống</Text>
         </View>
         <View style={styles.headerRight}>

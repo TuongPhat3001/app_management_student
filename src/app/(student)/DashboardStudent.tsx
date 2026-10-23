@@ -144,6 +144,13 @@ const DashboardStudent = () => {
       icon: "qr-code-outline" as const,
       color: "#7C3AED",
     },
+    {
+      title: "Cảnh báo học vụ",
+      desc: "Xem cảnh báo GPA / môn trượt",
+      route: "/(student)/AcademicWarnings",
+      icon: "warning-outline" as const,
+      color: "#DC2626",
+    },
   ];
 
   if (loading) {
