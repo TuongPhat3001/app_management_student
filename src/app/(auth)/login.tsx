@@ -38,6 +38,8 @@ const LoginScreen = () => {
   const slide = useRef(new Animated.Value(28)).current;
   const btnScale = useRef(new Animated.Value(1)).current;
   const lampGlow = useRef(new Animated.Value(0)).current;
+  const theme = useRef(new Animated.Value(0)).current;
+  const toggleScale = useRef(new Animated.Value(1)).current;
   const swing = useRef(new Animated.Value(0)).current;
   const borderSpin = useRef(new Animated.Value(0)).current;
 
@@ -57,6 +59,7 @@ const LoginScreen = () => {
       }),
     ]).start();
 
+    // Đung đưa liên tục
     Animated.loop(
       Animated.sequence([
         Animated.timing(swing, {
@@ -80,6 +83,7 @@ const LoginScreen = () => {
       ]),
     ).start();
 
+    // Viền màu quay vòng
     Animated.loop(
       Animated.timing(borderSpin, {
         toValue: 1,
@@ -91,13 +95,39 @@ const LoginScreen = () => {
   }, [fade, slide, swing, borderSpin]);
 
   useEffect(() => {
-    Animated.timing(lampGlow, {
-      toValue: lightOn ? 1 : 0,
-      duration: 450,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.cubic),
-    }).start();
-  }, [lightOn, lampGlow]);
+    Animated.parallel([
+      Animated.timing(theme, {
+        toValue: lightOn ? 1 : 0,
+        duration: 700,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+        useNativeDriver: false, // màu nền / chữ
+      }),
+      Animated.timing(lampGlow, {
+        toValue: lightOn ? 1 : 0,
+        duration: 700,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [lightOn, theme, lampGlow]);
+
+  const onToggleLight = () => {
+    Animated.sequence([
+      Animated.spring(toggleScale, {
+        toValue: 0.94,
+        useNativeDriver: true,
+        friction: 5,
+        tension: 200,
+      }),
+      Animated.spring(toggleScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 5,
+        tension: 120,
+      }),
+    ]).start();
+    setLightOn((v) => !v);
+  };
 
   const pressIn = () =>
     Animated.spring(btnScale, {
@@ -164,12 +194,34 @@ const LoginScreen = () => {
     }
   };
 
-  const bgDark = "#0B1B33";
-  const bgLight = "#E8EEF6";
-  const bg = lightOn ? bgLight : bgDark;
-  const brandTitleColor = lightOn ? "#0F172A" : "#FFFFFF";
-  const brandSubColor = lightOn ? "#475569" : "rgba(255,255,255,0.72)";
-  const brandHintColor = lightOn ? "#64748B" : "rgba(255,255,255,0.55)";
+  const bgColor = theme.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["#0B1B33", "#E8EEF6"],
+  });
+  const brandTitleColor = theme.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["#FFFFFF", "#0F172A"],
+  });
+  const brandSubColor = theme.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(255,255,255,0.72)", "#475569"],
+  });
+  const brandHintColor = theme.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(255,255,255,0.55)", "#64748B"],
+  });
+  const toggleBg = theme.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(255,255,255,0.08)", "rgba(37,99,235,0.12)"],
+  });
+  const toggleBorder = theme.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(255,255,255,0.15)", "rgba(37,99,235,0.35)"],
+  });
+  const toggleTextColor = theme.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["#E2E8F0", "#1D4ED8"],
+  });
 
   const swingRotate = swing.interpolate({
     inputRange: [-1, 0, 1],
@@ -182,10 +234,10 @@ const LoginScreen = () => {
   });
 
   return (
-    <View style={[styles.root, { backgroundColor: bg }]}>
+    <Animated.View style={[styles.root, { backgroundColor: bgColor }]}>
       <StatusBar
         barStyle={lightOn ? "dark-content" : "light-content"}
-        backgroundColor={bg}
+        animated
       />
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
@@ -207,41 +259,49 @@ const LoginScreen = () => {
                     <Text style={styles.logoLetters}>PP</Text>
                   </View>
                   <View>
-                    <Text
+                    <Animated.Text
                       style={[styles.brandName, { color: brandTitleColor }]}>
                       PP Academy
-                    </Text>
-                    <Text style={[styles.brandTag, { color: brandHintColor }]}>
+                    </Animated.Text>
+                    <Animated.Text
+                      style={[styles.brandTag, { color: brandHintColor }]}>
                       EDUCATION MANAGER
-                    </Text>
+                    </Animated.Text>
                   </View>
                 </View>
 
-                <TouchableOpacity
-                  style={[
-                    styles.lightToggle,
-                    lightOn ? styles.lightToggleOn : styles.lightToggleOff,
-                  ]}
-                  onPress={() => setLightOn((v) => !v)}
-                  activeOpacity={0.85}>
-                  <Ionicons
-                    name={lightOn ? "bulb" : "bulb-outline"}
-                    size={16}
-                    color={lightOn ? "#1D4ED8" : "#E2E8F0"}
-                  />
-                  <Text
-                    style={[
-                      styles.lightToggleText,
-                      { color: lightOn ? "#1D4ED8" : "#E2E8F0" },
-                    ]}>
-                    {lightOn ? "Đèn đang bật" : "Bật sáng góc học tập"}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={[styles.lightHint, { color: brandHintColor }]}>
+                <Animated.View style={{ transform: [{ scale: toggleScale }] }}>
+                  <TouchableOpacity activeOpacity={0.9} onPress={onToggleLight}>
+                    <Animated.View
+                      style={[
+                        styles.lightToggle,
+                        {
+                          backgroundColor: toggleBg,
+                          borderColor: toggleBorder,
+                          borderWidth: 1,
+                        },
+                      ]}>
+                      <Ionicons
+                        name={lightOn ? "bulb" : "bulb-outline"}
+                        size={16}
+                        color={lightOn ? "#1D4ED8" : "#E2E8F0"}
+                      />
+                      <Animated.Text
+                        style={[
+                          styles.lightToggleText,
+                          { color: toggleTextColor },
+                        ]}>
+                        {lightOn ? "Đèn đang bật" : "Bật sáng góc học tập"}
+                      </Animated.Text>
+                    </Animated.View>
+                  </TouchableOpacity>
+                </Animated.View>
+                <Animated.Text
+                  style={[styles.lightHint, { color: brandHintColor }]}>
                   {lightOn
                     ? "Một chút ánh sáng. Một khởi đầu mới."
                     : "Chạm vào chiếu đèn để bật sáng."}
-                </Text>
+                </Animated.Text>
 
                 {/* Đèn treo đung đưa */}
                 <View style={styles.illustWrap}>
@@ -296,16 +356,19 @@ const LoginScreen = () => {
                   </View>
                 </View>
 
-                <Text style={[styles.kicker, { color: brandHintColor }]}>
+                <Animated.Text
+                  style={[styles.kicker, { color: brandHintColor }]}>
                   HỆ THỐNG QUẢN LÝ ĐÀO TẠO
-                </Text>
-                <Text style={[styles.heroTitle, { color: brandTitleColor }]}>
+                </Animated.Text>
+                <Animated.Text
+                  style={[styles.heroTitle, { color: brandTitleColor }]}>
                   Bật sáng tri thức.{"\n"}Bắt đầu hành trình.
-                </Text>
-                <Text style={[styles.heroLead, { color: brandSubColor }]}>
+                </Animated.Text>
+                <Animated.Text
+                  style={[styles.heroLead, { color: brandSubColor }]}>
                   Quản lý lớp học, sinh viên, điểm danh, điểm số và hoạt động
                   giảng dạy trên một nền tảng duy nhất.
-                </Text>
+                </Animated.Text>
               </View>
 
               {/* ===== FORM + VIỀN MÀU CHẠY ===== */}
@@ -450,7 +513,7 @@ const LoginScreen = () => {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </View>
+    </Animated.View>
   );
 };
 
