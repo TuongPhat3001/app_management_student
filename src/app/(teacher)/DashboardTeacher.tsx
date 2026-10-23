@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import BellButton from "@/src/components/BellButton";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -147,14 +147,11 @@ const DashboardTeacher = () => {
           <Text style={styles.greeting}>Dashboard</Text>
           <Text style={styles.name}>Giảng viên</Text>
         </View>
-        <TouchableOpacity
-          style={styles.bellBtn}
+        <BellButton
           onPress={() =>
             router.push({ pathname: "/(teacher)/Notification" } as any)
           }
-          activeOpacity={0.8}>
-          <Ionicons name="notifications-outline" size={22} color="#1A1A1A" />
-        </TouchableOpacity>
+        />
       </View>
 
       <HomeScreen role="teacher" embedded />

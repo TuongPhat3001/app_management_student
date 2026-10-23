@@ -1,9 +1,17 @@
 import apiClient from "@/src/api/axios";
+import {
+  deleteNotificationLocal,
+  getDeletedIds,
+  getReadIds,
+  markAllNotificationsRead,
+  markOneRead,
+} from "@/src/utils/notificationBadge";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   RefreshControl,
@@ -15,11 +23,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/**
- * GET /notifications — khớp backend models.Notification
- * Subject, Content, Status, Channel, CreatedAt, SentAt
- */
-
 interface NotificationItem {
   id: string;
   subject: string;
@@ -29,6 +32,7 @@ interface NotificationItem {
   createdAt?: string;
   sentAt?: string;
   timeLabel: string;
+  isRead?: boolean;
 }
 
 const POLL_MS = 15000;
@@ -56,7 +60,11 @@ const statusMeta = (status: string) => {
   return { label: "Hệ thống", color: "#5B5BD6", bg: "#EDE9FE" };
 };
 
-const normalizeList = (raw: any): NotificationItem[] => {
+const normalizeList = (
+  raw: any,
+  read: Set<string>,
+  deleted: Set<string>,
+): NotificationItem[] => {
   const list = Array.isArray(raw)
     ? raw
     : Array.isArray(raw?.data)
@@ -87,8 +95,10 @@ const normalizeList = (raw: any): NotificationItem[] => {
         createdAt: createdAt ? String(createdAt) : undefined,
         sentAt: sentAt ? String(sentAt) : undefined,
         timeLabel: formatTime(sentAt || createdAt),
+        isRead: read.has(id),
       };
     })
+    .filter((n: { id: string }) => !deleted.has(n.id))
     .sort((a: NotificationItem, b: NotificationItem) => {
       const ta = new Date(b.createdAt || b.sentAt || 0).getTime();
       const tb = new Date(a.createdAt || a.sentAt || 0).getTime();
@@ -109,7 +119,11 @@ const Notification = () => {
     try {
       if (!silent) setError("");
       const res = await apiClient.get("/notifications");
-      setList(normalizeList(res.data));
+      const [read, deleted] = await Promise.all([
+        getReadIds(),
+        getDeletedIds(),
+      ]);
+      setList(normalizeList(res.data, read, deleted));
     } catch (err: any) {
       if (!silent) {
         setError(
@@ -134,19 +148,63 @@ const Notification = () => {
     }, [fetchList]),
   );
 
+  const onMarkOneRead = async (item: NotificationItem) => {
+    await markOneRead(item.id);
+    setList((prev) =>
+      prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
+    );
+    if (selected?.id === item.id) {
+      setSelected({ ...item, isRead: true });
+    }
+  };
+
+  const onMarkAllRead = async () => {
+    await markAllNotificationsRead(list.map((n) => n.id));
+    setList((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  };
+
+  const onDelete = (item: NotificationItem) => {
+    Alert.alert("Xóa thông báo", `Xóa "${item.subject}"?`, [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Xóa",
+        style: "destructive",
+        onPress: async () => {
+          await deleteNotificationLocal(item.id);
+          setList((prev) => prev.filter((n) => n.id !== item.id));
+          if (selected?.id === item.id) setSelected(null);
+        },
+      },
+    ]);
+  };
+
+  const openDetail = async (item: NotificationItem) => {
+    setSelected(item);
+    if (!item.isRead) {
+      await onMarkOneRead(item);
+    }
+  };
+
   const renderItem = ({ item }: { item: NotificationItem }) => {
     const st = statusMeta(item.status);
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, !item.isRead && styles.cardUnread]}
         activeOpacity={0.75}
-        onPress={() => setSelected(item)}>
+        onPress={() => openDetail(item)}>
         <View style={styles.iconWrap}>
-          <Ionicons name="notifications" size={22} color="#5B5BD6" />
+          <Ionicons
+            name={item.isRead ? "mail-open-outline" : "mail-unread-outline"}
+            size={22}
+            color={item.isRead ? "#9CA3AF" : "#5B5BD6"}
+          />
+          {!item.isRead && <View style={styles.dot} />}
         </View>
         <View style={styles.body}>
           <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={1}>
+            <Text
+              style={[styles.title, !item.isRead && styles.titleUnread]}
+              numberOfLines={1}>
               {item.subject}
             </Text>
             <View style={[styles.badge, { backgroundColor: st.bg }]}>
@@ -158,11 +216,33 @@ const Notification = () => {
           <Text style={styles.preview} numberOfLines={2}>
             {item.content || "(Không có nội dung)"}
           </Text>
-          <Text style={styles.time}>{item.timeLabel || "—"}</Text>
+          <View style={styles.rowActions}>
+            <Text style={styles.time}>{item.timeLabel || "—"}</Text>
+            <View style={styles.actionBtns}>
+              {!item.isRead && (
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => onMarkOneRead(item)}
+                  hitSlop={8}>
+                  <Ionicons name="checkmark-done" size={16} color="#059669" />
+                  <Text style={styles.actionRead}>Đánh dấu đã đọc</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => onDelete(item)}
+                hitSlop={8}>
+                <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                <Text style={styles.actionDelete}>Xóa</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </TouchableOpacity>
     );
   };
+
+  const unreadCount = list.filter((n) => !n.isRead).length;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -177,7 +257,17 @@ const Notification = () => {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.count}>{list.length} thông báo</Text>
+      <View style={styles.toolbar}>
+        <Text style={styles.count}>
+          {list.length} thông báo
+          {unreadCount > 0 ? ` · ${unreadCount} chưa đọc` : ""}
+        </Text>
+        {unreadCount > 0 && (
+          <TouchableOpacity onPress={onMarkAllRead} hitSlop={8}>
+            <Text style={styles.markAll}>Đánh dấu tất cả đã đọc</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {loading ? (
         <View style={styles.center}>
@@ -247,6 +337,22 @@ const Notification = () => {
             <Text style={styles.modalBody}>
               {selected?.content || "(Không có nội dung)"}
             </Text>
+            <View style={styles.modalActions}>
+              {selected && !selected.isRead && (
+                <TouchableOpacity
+                  style={styles.modalReadBtn}
+                  onPress={() => selected && onMarkOneRead(selected)}>
+                  <Ionicons name="checkmark-done" size={18} color="#059669" />
+                  <Text style={styles.modalReadText}>Đánh dấu đã đọc</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.modalDeleteBtn}
+                onPress={() => selected && onDelete(selected)}>
+                <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                <Text style={styles.modalDeleteText}>Xóa thông báo</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={() => setSelected(null)}>
@@ -286,33 +392,46 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1A1A1A",
   },
-  count: {
-    fontSize: 13,
-    color: "#6B7280",
-    paddingHorizontal: 20,
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  list: { paddingHorizontal: 16, paddingBottom: 24, flexGrow: 1 },
+  count: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
+  markAll: { fontSize: 13, color: "#5B5BD6", fontWeight: "700" },
+  list: { paddingHorizontal: 14, paddingBottom: 32 },
   card: {
     flexDirection: "row",
     backgroundColor: "#FFF",
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+    gap: 12,
+  },
+  cardUnread: {
+    backgroundColor: "#F5F3FF",
+    borderColor: "#DDD6FE",
   },
   iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#EDE9FE",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+  },
+  dot: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#EF4444",
   },
   body: { flex: 1 },
   titleRow: {
@@ -321,63 +440,105 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
-  title: { flex: 1, fontSize: 15, fontWeight: "700", color: "#1A1A1A" },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  badgeText: { fontSize: 11, fontWeight: "700" },
-  preview: {
-    fontSize: 13.5,
-    color: "#6B7280",
-    lineHeight: 19,
-    marginBottom: 6,
+  title: { flex: 1, fontSize: 15, fontWeight: "600", color: "#374151" },
+  titleUnread: { fontWeight: "800", color: "#1A1A1A" },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  time: { fontSize: 12, color: "#9CA3AF" },
-  empty: { alignItems: "center", paddingTop: 80, paddingHorizontal: 28 },
+  badgeText: { fontSize: 11, fontWeight: "700" },
+  preview: { fontSize: 13, color: "#6B7280", lineHeight: 18, marginBottom: 8 },
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  time: { fontSize: 11, color: "#9CA3AF" },
+  actionBtns: { flexDirection: "row", alignItems: "center", gap: 12 },
+  actionBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  actionRead: { fontSize: 12, color: "#059669", fontWeight: "600" },
+  actionDelete: { fontSize: 12, color: "#DC2626", fontWeight: "600" },
+  empty: {
+    alignItems: "center",
+    paddingTop: 80,
+    paddingHorizontal: 32,
+    gap: 10,
+  },
   emptyText: {
     fontSize: 15,
-    color: "#9CA3AF",
-    marginTop: 12,
+    color: "#6B7280",
     textAlign: "center",
+    fontWeight: "600",
   },
-  emptyHint: {
-    fontSize: 13,
-    color: "#D1D5DB",
-    marginTop: 8,
-    textAlign: "center",
-  },
+  emptyHint: { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
   retry: {
-    marginTop: 16,
+    marginTop: 8,
     backgroundColor: "#5B5BD6",
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 12,
   },
-  retryText: { color: "#FFF", fontWeight: "600" },
+  retryText: { color: "#FFF", fontWeight: "700" },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
   modal: {
     backgroundColor: "#FFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: 20,
-    paddingBottom: 36,
+    paddingBottom: 32,
+    maxHeight: "80%",
   },
-  modalHead: { flexDirection: "row", gap: 12, marginBottom: 8 },
-  modalTitle: { flex: 1, fontSize: 18, fontWeight: "700", color: "#1A1A1A" },
-  modalTime: { fontSize: 13, color: "#9CA3AF", marginBottom: 14 },
+  modalHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#1A1A1A",
+  },
+  modalTime: { fontSize: 12, color: "#9CA3AF", marginBottom: 12 },
   modalBody: {
     fontSize: 15,
     color: "#374151",
     lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  closeBtn: {
-    backgroundColor: "#F3F4F6",
+  modalActions: { gap: 10, marginBottom: 12 },
+  modalReadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#ECFDF5",
+    padding: 12,
     borderRadius: 12,
+  },
+  modalReadText: { color: "#059669", fontWeight: "700", fontSize: 14 },
+  modalDeleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEF2F2",
+    padding: 12,
+    borderRadius: 12,
+  },
+  modalDeleteText: { color: "#DC2626", fontWeight: "700", fontSize: 14 },
+  closeBtn: {
+    backgroundColor: "#5B5BD6",
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
   },
-  closeText: { fontSize: 15, fontWeight: "600", color: "#374151" },
+  closeText: { color: "#FFF", fontWeight: "700", fontSize: 15 },
 });

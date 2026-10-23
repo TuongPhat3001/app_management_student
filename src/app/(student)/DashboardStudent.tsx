@@ -1,3 +1,4 @@
+import BellButton from "@/src/components/BellButton";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -174,11 +175,9 @@ const DashboardStudent = () => {
             </Text>
             <Text style={styles.name}>Sinh viên</Text>
           </View>
-          <TouchableOpacity
-            style={styles.bellBtn}
-            onPress={() => router.push("/(student)/Notification" as any)}>
-            <Ionicons name="notifications-outline" size={22} color="#1A1A1A" />
-          </TouchableOpacity>
+          <BellButton
+            onPress={() => router.push("/(student)/Notification" as any)}
+          />
         </View>
 
         <HomeScreen role="student" embedded />
